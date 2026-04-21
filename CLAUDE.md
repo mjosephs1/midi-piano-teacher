@@ -55,3 +55,9 @@ pip install mido python-rtmidi PyQt6
 python main.py               # desktop app
 python midi_display.py       # terminal app
 ```
+
+## When Implementing Changes
+- When adding new features or files, update the relevant section of CLAUDE.md to document the change
+- When removing or renaming files, update the Files section and any related documentation
+- When modifying page logic or MIDI handling, update the corresponding section (Architecture, Find the Chord page, etc.)
+- Before marking implementation tasks complete, verify that CLAUDE.md reflects all new code paths, methods, and state structures
