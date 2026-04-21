@@ -5,6 +5,7 @@ from PyQt6.QtGui import QFont
 
 class HomePage(QWidget):
     nav_to_midi_display = pyqtSignal()
+    nav_to_find_chord = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -45,3 +46,25 @@ class HomePage(QWidget):
         """)
         btn.clicked.connect(self.nav_to_midi_display)
         layout.addWidget(btn)
+
+        layout.addSpacing(12)
+
+        btn2 = QPushButton("Find the Chord")
+        btn2.setFont(QFont("Helvetica", 15))
+        btn2.setFixedHeight(44)
+        btn2.setStyleSheet("""
+            QPushButton {
+                background-color: #2e7d4f;
+                color: #ffffff;
+                border: none;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background-color: #3e9d5f;
+            }
+            QPushButton:pressed {
+                background-color: #1e6d3f;
+            }
+        """)
+        btn2.clicked.connect(self.nav_to_find_chord)
+        layout.addWidget(btn2)
