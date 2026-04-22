@@ -184,9 +184,19 @@ class FindChordPage(QWidget):
                 lbl.setFont(QFont("Helvetica", 24, QFont.Weight.Bold))
                 lbl.setStyleSheet("color: #888888; background-color: transparent;")
 
-    def _random_chord(self) -> str:
+    def _build_queue(self) -> list[str]:
+        queue = []
+        for _ in range(_QUEUE_SIZE):
+            prev = queue[-1] if queue else None
+            queue.append(self._random_chord(exclude=prev))
+        return queue
+
+    def _random_chord(self, exclude: str | None = None) -> str:
         suffixes = [s for name, sl in CHORD_GROUPS.items() if self._group_enabled[name] for s in sl]
-        return f"{random.choice(NOTE_NAMES)}{random.choice(suffixes)}"
+        chord = f"{random.choice(NOTE_NAMES)}{random.choice(suffixes)}"
+        while exclude is not None and chord == exclude and len(NOTE_NAMES) * len(suffixes) > 1:
+            chord = f"{random.choice(NOTE_NAMES)}{random.choice(suffixes)}"
+        return chord
 
     def _on_group_toggled(self, name: str, checked: bool) -> None:
         if not checked and sum(self._group_enabled.values()) <= 1:
@@ -199,7 +209,7 @@ class FindChordPage(QWidget):
         self._group_enabled[name] = checked
         self._group_buttons[name].setStyleSheet(_toggle_style(checked=checked))
         if self._active:
-            self._queue = [self._random_chord() for _ in range(_QUEUE_SIZE)]
+            self._queue = self._build_queue()
             self._refresh_chord_labels()
 
     def activate(self):
@@ -213,7 +223,7 @@ class FindChordPage(QWidget):
         self._active = True
         self._advancing = False
         self.active_notes = set()
-        self._queue = [self._random_chord() for _ in range(_QUEUE_SIZE)]
+        self._queue = self._build_queue()
         self._refresh_chord_labels()
         self._playing_label.setText("--")
         t = threading.Thread(target=self._midi_loop, args=(ports[0],), daemon=True)
@@ -259,6 +269,6 @@ class FindChordPage(QWidget):
     def _advance(self):
         self._queue.pop(0)
         while len(self._queue) < _QUEUE_SIZE:
-            self._queue.append(self._random_chord())
+            self._queue.append(self._random_chord(exclude=self._queue[-1] if self._queue else None))
         self._refresh_chord_labels()
         self._advancing = False
