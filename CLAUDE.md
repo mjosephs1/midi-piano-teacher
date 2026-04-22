@@ -33,9 +33,12 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 - `_advancing: bool` flag blocks re-triggering during the green flash
 - `CHORD_GROUPS` — module-level dict mapping 10 group names (e.g. "Major", "Minor", "Dom 7th") to lists of chord suffixes
 - `_group_enabled: dict[str, bool]` — tracks which chord groups are active; all enabled by default
-- `_random_chord()` picks a random root from `NOTE_NAMES` and a random suffix from enabled `CHORD_GROUPS` entries (filtered by `_group_enabled`)
+- `_sharps_enabled: bool` — controls whether sharp root notes (C#, D#, F#, G#, A#) can appear; enabled by default
+- `_available_roots()` — returns filtered list of root notes based on `_sharps_enabled`
+- `_random_chord()` picks a random root from `_available_roots()` and a random suffix from enabled `CHORD_GROUPS` entries
 - `_on_group_toggled(name, checked)` — handles toggling chord groups on/off; enforces at least 1 group stays enabled, regenerates the queue if page is active
-- Two rows of toggle buttons (5 per row) at page bottom for chord group filtering
+- `_on_sharps_toggled(checked)` — handles toggling sharps on/off, regenerates the queue if page is active
+- Two rows of toggle buttons (5 per row) for chord group filtering, plus a "Sharps" toggle button
 - "Playing" label below shows the currently detected chord so the user knows what they're playing if wrong
 
 ## Styling conventions

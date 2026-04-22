@@ -49,6 +49,7 @@ class FindChordPage(QWidget):
         self._queue = []
         self._group_enabled = {name: True for name in CHORD_GROUPS}
         self._group_buttons: dict[str, QPushButton] = {}
+        self._sharps_enabled = True
 
         self._timer = QTimer()
         self._timer.timeout.connect(self._poll)
@@ -159,6 +160,19 @@ class FindChordPage(QWidget):
             layout.addLayout(row)
             layout.addSpacing(4)
 
+        layout.addSpacing(4)
+        sharps_row = QHBoxLayout()
+        sharps_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._sharps_btn = QPushButton("Sharps")
+        self._sharps_btn.setCheckable(True)
+        self._sharps_btn.setChecked(True)
+        self._sharps_btn.setFixedHeight(26)
+        self._sharps_btn.setFont(QFont("Helvetica", 11))
+        self._sharps_btn.setStyleSheet(_toggle_style(checked=True))
+        self._sharps_btn.toggled.connect(self._on_sharps_toggled)
+        sharps_row.addWidget(self._sharps_btn)
+        layout.addLayout(sharps_row)
+
         layout.addSpacing(8)
 
         playing_heading = QLabel("Playing")
@@ -184,6 +198,11 @@ class FindChordPage(QWidget):
                 lbl.setFont(QFont("Helvetica", 24, QFont.Weight.Bold))
                 lbl.setStyleSheet("color: #888888; background-color: transparent;")
 
+    def _available_roots(self) -> list[str]:
+        if self._sharps_enabled:
+            return NOTE_NAMES
+        return [n for n in NOTE_NAMES if "#" not in n]
+
     def _build_queue(self) -> list[str]:
         queue = []
         for _ in range(_QUEUE_SIZE):
@@ -192,10 +211,11 @@ class FindChordPage(QWidget):
         return queue
 
     def _random_chord(self, exclude: str | None = None) -> str:
+        roots = self._available_roots()
         suffixes = [s for name, sl in CHORD_GROUPS.items() if self._group_enabled[name] for s in sl]
-        chord = f"{random.choice(NOTE_NAMES)}{random.choice(suffixes)}"
-        while exclude is not None and chord == exclude and len(NOTE_NAMES) * len(suffixes) > 1:
-            chord = f"{random.choice(NOTE_NAMES)}{random.choice(suffixes)}"
+        chord = f"{random.choice(roots)}{random.choice(suffixes)}"
+        while exclude is not None and chord == exclude and len(roots) * len(suffixes) > 1:
+            chord = f"{random.choice(roots)}{random.choice(suffixes)}"
         return chord
 
     def _on_group_toggled(self, name: str, checked: bool) -> None:
@@ -208,6 +228,13 @@ class FindChordPage(QWidget):
             return
         self._group_enabled[name] = checked
         self._group_buttons[name].setStyleSheet(_toggle_style(checked=checked))
+        if self._active:
+            self._queue = self._build_queue()
+            self._refresh_chord_labels()
+
+    def _on_sharps_toggled(self, checked: bool) -> None:
+        self._sharps_enabled = checked
+        self._sharps_btn.setStyleSheet(_toggle_style(checked=checked))
         if self._active:
             self._queue = self._build_queue()
             self._refresh_chord_labels()
