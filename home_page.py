@@ -6,6 +6,7 @@ from PyQt6.QtGui import QFont
 class HomePage(QWidget):
     nav_to_midi_display = pyqtSignal()
     nav_to_find_chord = pyqtSignal()
+    nav_to_high_scores = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -68,3 +69,25 @@ class HomePage(QWidget):
         """)
         btn2.clicked.connect(self.nav_to_find_chord)
         layout.addWidget(btn2)
+
+        layout.addSpacing(12)
+
+        btn3 = QPushButton("High Scores")
+        btn3.setFont(QFont("Helvetica", 15))
+        btn3.setFixedHeight(44)
+        btn3.setStyleSheet("""
+            QPushButton {
+                background-color: #6a3d9a;
+                color: #ffffff;
+                border: none;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background-color: #7a4daa;
+            }
+            QPushButton:pressed {
+                background-color: #5a2d8a;
+            }
+        """)
+        btn3.clicked.connect(self.nav_to_high_scores)
+        layout.addWidget(btn3)

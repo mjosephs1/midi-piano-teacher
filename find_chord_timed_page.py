@@ -8,6 +8,7 @@ from PyQt6.QtGui import QFont
 
 from midi_display import NOTE_NAMES, CHORD_PATTERNS, identify_chord
 from find_chord_page import CHORD_GROUPS
+import score_manager
 
 _QUEUE_SIZE = 10
 _DISPLAY_COUNT = 5
@@ -29,6 +30,7 @@ class FindChordTimedPage(QWidget):
         self._waiting_to_start = False
         self._queue = []
         self._score = 0
+        self._best_score: int | None = None
         self._time_remaining = _GAME_DURATION_SECS
         self._group_enabled = {}
         self._sharps_enabled = True
@@ -72,6 +74,12 @@ class FindChordTimedPage(QWidget):
         self._score_label.setStyleSheet("color: #ffffff; background-color: transparent;")
         self._score_label.setFont(QFont("Helvetica", 14))
         top_row.addWidget(self._score_label)
+
+        self._best_label = QLabel("Best: —")
+        self._best_label.setStyleSheet("color: #aaaaaa; background-color: transparent;")
+        self._best_label.setFont(QFont("Helvetica", 14))
+        top_row.addSpacing(16)
+        top_row.addWidget(self._best_label)
         layout.addLayout(top_row)
 
         layout.addSpacing(8)
@@ -199,6 +207,12 @@ class FindChordTimedPage(QWidget):
         self._results_score_label.setFont(QFont("Helvetica", 36, QFont.Weight.Bold))
         overlay_layout.addWidget(self._results_score_label)
 
+        self._results_best_label = QLabel("Best: —")
+        self._results_best_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._results_best_label.setStyleSheet("color: #aaaaaa; background-color: transparent;")
+        self._results_best_label.setFont(QFont("Helvetica", 16))
+        overlay_layout.addWidget(self._results_best_label)
+
         overlay_layout.addSpacing(20)
 
         play_again_btn = QPushButton("Play Again")
@@ -290,6 +304,8 @@ class FindChordTimedPage(QWidget):
         self.active_notes = set()
 
         self._score_label.setText("Score: 0")
+        self._best_score = score_manager.get_best_score(self._group_enabled, self._sharps_enabled)
+        self._best_label.setText(f"Best: {self._best_score}" if self._best_score is not None else "Best: —")
         self._time_label.setText("60s")
         self._time_label.setStyleSheet("color: #ffffff; background-color: transparent;")
         self._playing_label.setText("--")
@@ -356,7 +372,11 @@ class FindChordTimedPage(QWidget):
         self._game_over = True
         self._countdown_timer.stop()
         self._poll_timer.stop()
+        score_manager.record_score(self._group_enabled, self._sharps_enabled, self._score)
+        self._best_score = score_manager.get_best_score(self._group_enabled, self._sharps_enabled)
+        self._best_label.setText(f"Best: {self._best_score}" if self._best_score is not None else "Best: —")
         self._results_score_label.setText(f"Score: {self._score}")
+        self._results_best_label.setText(f"Best: {self._best_score}" if self._best_score is not None else "Best: —")
         self._results_overlay.setGeometry(self.rect())
         self._results_overlay.raise_()
         self._results_overlay.show()
