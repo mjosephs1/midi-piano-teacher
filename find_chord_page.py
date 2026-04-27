@@ -37,7 +37,7 @@ def _toggle_style(checked: bool) -> str:
 
 
 class FindChordPage(QWidget):
-    nav_to_home = pyqtSignal()
+    nav_to_mode_select = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -47,8 +47,7 @@ class FindChordPage(QWidget):
         self._active = False
         self._advancing = False
         self._queue = []
-        self._group_enabled = {name: True for name in CHORD_GROUPS}
-        self._group_buttons: dict[str, QPushButton] = {}
+        self._group_enabled = {}
         self._sharps_enabled = True
 
         self._timer = QTimer()
@@ -135,46 +134,6 @@ class FindChordPage(QWidget):
 
         layout.addStretch()
 
-        settings_divider = QFrame()
-        settings_divider.setFrameShape(QFrame.Shape.HLine)
-        settings_divider.setStyleSheet("color: #333333;")
-        layout.addWidget(settings_divider)
-
-        layout.addSpacing(8)
-
-        group_names = list(CHORD_GROUPS.keys())
-        for row_names in [group_names[:5], group_names[5:]]:
-            row = QHBoxLayout()
-            row.setSpacing(6)
-            row.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            for group_name in row_names:
-                btn = QPushButton(group_name)
-                btn.setCheckable(True)
-                btn.setChecked(True)
-                btn.setFixedHeight(26)
-                btn.setFont(QFont("Helvetica", 11))
-                btn.setStyleSheet(_toggle_style(checked=True))
-                btn.toggled.connect(lambda checked, n=group_name: self._on_group_toggled(n, checked))
-                row.addWidget(btn)
-                self._group_buttons[group_name] = btn
-            layout.addLayout(row)
-            layout.addSpacing(4)
-
-        layout.addSpacing(4)
-        sharps_row = QHBoxLayout()
-        sharps_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._sharps_btn = QPushButton("Sharps")
-        self._sharps_btn.setCheckable(True)
-        self._sharps_btn.setChecked(True)
-        self._sharps_btn.setFixedHeight(26)
-        self._sharps_btn.setFont(QFont("Helvetica", 11))
-        self._sharps_btn.setStyleSheet(_toggle_style(checked=True))
-        self._sharps_btn.toggled.connect(self._on_sharps_toggled)
-        sharps_row.addWidget(self._sharps_btn)
-        layout.addLayout(sharps_row)
-
-        layout.addSpacing(8)
-
         playing_heading = QLabel("Playing")
         playing_heading.setAlignment(Qt.AlignmentFlag.AlignCenter)
         playing_heading.setStyleSheet("color: #aaaaaa; background-color: transparent;")
@@ -199,9 +158,8 @@ class FindChordPage(QWidget):
                 lbl.setStyleSheet("color: #888888; background-color: transparent;")
 
     def _available_roots(self) -> list[str]:
-        if self._sharps_enabled:
-            return NOTE_NAMES
-        return [n for n in NOTE_NAMES if "#" not in n]
+        roots = NOTE_NAMES if self._sharps_enabled else [n for n in NOTE_NAMES if "#" not in n]
+        return roots
 
     def _build_queue(self) -> list[str]:
         queue = []
@@ -218,28 +176,7 @@ class FindChordPage(QWidget):
             chord = f"{random.choice(roots)}{random.choice(suffixes)}"
         return chord
 
-    def _on_group_toggled(self, name: str, checked: bool) -> None:
-        if not checked and sum(self._group_enabled.values()) <= 1:
-            btn = self._group_buttons[name]
-            btn.blockSignals(True)
-            btn.setChecked(True)
-            btn.blockSignals(False)
-            btn.setStyleSheet(_toggle_style(checked=True))
-            return
-        self._group_enabled[name] = checked
-        self._group_buttons[name].setStyleSheet(_toggle_style(checked=checked))
-        if self._active:
-            self._queue = self._build_queue()
-            self._refresh_chord_labels()
-
-    def _on_sharps_toggled(self, checked: bool) -> None:
-        self._sharps_enabled = checked
-        self._sharps_btn.setStyleSheet(_toggle_style(checked=checked))
-        if self._active:
-            self._queue = self._build_queue()
-            self._refresh_chord_labels()
-
-    def activate(self):
+    def activate(self, group_enabled: dict[str, bool], sharps_enabled: bool):
         if self._active:
             return
         ports = mido.get_input_names()
@@ -247,6 +184,8 @@ class FindChordPage(QWidget):
             QMessageBox.warning(self, "No MIDI Device",
                 "No MIDI input devices found.\nConnect a device and try again.")
             return
+        self._group_enabled = group_enabled.copy()
+        self._sharps_enabled = sharps_enabled
         self._active = True
         self._advancing = False
         self.active_notes = set()
@@ -266,7 +205,7 @@ class FindChordPage(QWidget):
 
     def _on_back(self):
         self.deactivate()
-        self.nav_to_home.emit()
+        self.nav_to_mode_select.emit()
 
     def _midi_loop(self, port_name):
         try:
