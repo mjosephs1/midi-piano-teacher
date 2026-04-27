@@ -11,9 +11,10 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 - `find_chord_page.py` — `FindChordPage(QWidget)` Infinite mode: interactive chord practice; sliding window of random chord targets
 - `find_chord_mode_page.py` — `FindChordModePage(QWidget)` mode selection screen for Find the Chord (routes to Infinite or Timed mode); delegates chord settings to `ChordSettingsWidget`
 - `find_chord_timed_page.py` — `FindChordTimedPage(QWidget)` Timed mode: 60-second chord challenge with score counter; records scores to disk
-- `chord_settings_widget.py` — `ChordSettingsWidget(QWidget)` reusable toggle panel for chord groups + sharps; emits `settings_changed` signal on toggle
+- `chord_settings_widget.py` — `ChordSettingsWidget(QWidget)` reusable toggle panel for chord groups + sharps; emits `settings_changed` signal on toggle; loads/saves selections via `settings_manager`
 - `high_scores_page.py` — `HighScoresPage(QWidget)` displays top-10 scores per chord group/sharps combination with timestamps
 - `score_manager.py` — score persistence module: loads/saves JSON, manages top-10 per settings key, records new scores with timestamps
+- `settings_manager.py` — chord settings persistence: loads/saves selected chord groups and sharps to `chord_settings.json` on startup and after each toggle
 - `requirements.txt` — `mido>=1.3.0`, `python-rtmidi>=1.5.0`, `PyQt6>=6.0.0`
 
 ## Key functions in `midi_display.py`
@@ -35,10 +36,12 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 
 ## Chord Settings Widget (`chord_settings_widget.py`)
 - Reusable toggle UI for chord groups + sharps; used by `FindChordModePage` and `HighScoresPage`
-- Owns `_group_enabled: dict[str, bool]` (all enabled by default) and `_sharps_enabled: bool` (true by default)
+- On init: loads saved settings from `chord_settings.json` via `settings_manager.load_chord_settings()`; falls back to all-enabled defaults if file missing/corrupt
+- Owns `_group_enabled: dict[str, bool]` and `_sharps_enabled: bool`; button states initialized from loaded settings (with `blockSignals` to prevent spurious init signals)
 - Two rows of toggle buttons (5 per row) for chord groups + "Sharps" button below
 - Enforces at-least-one-group constraint: if only one group is enabled, disallow unchecking it
-- Emits `settings_changed` signal on any toggle change
+- On every toggle: calls `settings_manager.save_chord_settings()` to persist new state
+- Emits `settings_changed` signal on any toggle change (after save)
 - Exposes read-only properties: `group_enabled` (dict copy), `sharps_enabled` (bool)
 
 ## Find the Chord Mode page (`find_chord_mode_page.py`)
@@ -95,6 +98,12 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 - `get_best_score(group_enabled, sharps_enabled) → int | None` — returns highest score for this combo or None
 - `record_score(group_enabled, sharps_enabled, score: int)` — appends new score with `datetime.now()` timestamp, sorts, keeps top 10, writes to `high_scores.json`
 - File format: JSON dict mapping settings keys to sorted score lists; created on first save, silently recovers from corrupt files
+
+## Settings Manager (`settings_manager.py`)
+- Pure Python module; no Qt dependencies
+- `load_chord_settings(group_names: list[str]) → dict` — returns saved settings from `chord_settings.json`, falling back to all-enabled defaults on any error (file missing, corrupt, or new groups added)
+- `save_chord_settings(group_enabled: dict, sharps_enabled: bool) → None` — writes settings to `chord_settings.json`
+- File format: JSON with `{"group_enabled": {group_name: bool, ...}, "sharps_enabled": bool}`; created on first toggle change
 
 ## Styling conventions
 - On macOS, PyQt6 does not automatically inherit the parent's `background-color` stylesheet. Any child `QWidget` or `QLabel` inside a dark-background parent must explicitly set `background-color: transparent;` in its own stylesheet, otherwise it renders with the system default (visibly lighter or darker).
