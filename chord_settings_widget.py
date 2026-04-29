@@ -9,6 +9,26 @@ import settings_manager
 class ChordSettingsWidget(QWidget):
     settings_changed = pyqtSignal()
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._reload_settings_from_disk()
+
+    def _reload_settings_from_disk(self):
+        saved = settings_manager.load_chord_settings(list(CHORD_GROUPS.keys()))
+        self._group_enabled = saved["group_enabled"]
+        self._sharps_enabled = saved["sharps_enabled"]
+
+        for group_name, btn in self._group_buttons.items():
+            btn.blockSignals(True)
+            btn.setChecked(self._group_enabled[group_name])
+            btn.blockSignals(False)
+            btn.setStyleSheet(_toggle_style(checked=self._group_enabled[group_name]))
+
+        self._sharps_btn.blockSignals(True)
+        self._sharps_btn.setChecked(self._sharps_enabled)
+        self._sharps_btn.blockSignals(False)
+        self._sharps_btn.setStyleSheet(_toggle_style(checked=self._sharps_enabled))
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setStyleSheet("background-color: transparent;")

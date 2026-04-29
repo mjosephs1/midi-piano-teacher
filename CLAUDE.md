@@ -37,6 +37,7 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 ## Chord Settings Widget (`chord_settings_widget.py`)
 - Reusable toggle UI for chord groups + sharps; used by `FindChordModePage` and `HighScoresPage`
 - On init: loads saved settings from `chord_settings.json` via `settings_manager.load_chord_settings()`; falls back to all-enabled defaults if file missing/corrupt
+- On `showEvent`: reloads settings from disk (via `_reload_settings_from_disk()`) to stay in sync across multiple widget instances; button states updated without triggering signals
 - Owns `_group_enabled: dict[str, bool]` and `_sharps_enabled: bool`; button states initialized from loaded settings (with `blockSignals` to prevent spurious init signals)
 - Two rows of toggle buttons (5 per row) for chord groups + "Sharps" button below
 - Enforces at-least-one-group constraint: if only one group is enabled, disallow unchecking it
