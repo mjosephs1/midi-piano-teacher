@@ -12,8 +12,8 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 - `find_chord_mode_page.py` — `FindChordModePage(QWidget)` mode selection screen for Find the Chord (routes to Infinite or Timed mode); delegates chord settings to `ChordSettingsWidget`
 - `find_chord_timed_page.py` — `FindChordTimedPage(QWidget)` Timed mode: 60-second chord challenge with score counter; records scores to disk
 - `chord_settings_widget.py` — `ChordSettingsWidget(QWidget)` reusable toggle panel for chord groups + sharps; emits `settings_changed` signal on toggle; loads/saves selections via `settings_manager`
-- `high_scores_page.py` — `HighScoresPage(QWidget)` displays top-10 scores per chord group/sharps combination with timestamps
-- `score_manager.py` — score persistence module: loads/saves JSON, manages top-10 per settings key, records new scores with timestamps
+- `high_scores_page.py` — `HighScoresPage(QWidget)` displays top-10 scores per chord group/sharps combination with timestamps and accuracy %
+- `score_manager.py` — score persistence module: loads/saves JSON, manages top-10 per settings key, records new scores with timestamps and errors
 - `settings_manager.py` — chord settings persistence: loads/saves selected chord groups and sharps to `chord_settings.json` on startup and after each toggle
 - `requirements.txt` — `mido>=1.3.0`, `python-rtmidi>=1.5.0`, `PyQt6>=6.0.0`
 
@@ -71,34 +71,38 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 - `_chord_area` — `QWidget` container wrapping chord row + arrow row; hidden during start screen, shown after Start is pressed
 - `_score: int` — incremented on each correct chord; displayed in top-left
 - `_best_score: int | None` — fetched on `activate()`; displayed in top-right as "Best: N" or "Best: —"
+- `_errors: int` — incremented when user plays 3+ notes forming a recognized chord that doesn't match target; displayed during gameplay and in results overlay
+- `_last_chord: str | None` — debounce tracker; any chord equal to `_last_chord` is ignored (prevents double-counting same held chord)
+- `_errors_label`, `_results_errors_label`, `_results_accuracy_label` — UI labels for errors during gameplay and accuracy % in results overlay
 - `_time_remaining: int` — counts down from 60 to 0; label turns red (`#ff4444`) at ≤10 seconds
 - `_game_over: bool` — set to `True` when timer reaches 0; blocks `_poll()` and `_advance()` from further scoring
 - Two timers: `_poll_timer` (50ms, runs always) and `_countdown_timer` (1000ms, starts on Start or Play Again)
 - `_group_enabled`, `_sharps_enabled` — set by `activate()` from FindChordModePage
 - `_start_game()` — called on Start button click; shows chord queue, starts countdown
 - `_tick()` — decrements `_time_remaining`; calls `_end_game()` at 0
-- `_end_game()` — records score to disk via `score_manager.record_score()`, refreshes best score, stops timers, shows results overlay with final score and best
-- `_restart()` — called from "Play Again" button; skips start screen, goes straight to gameplay
-- `activate(group_enabled, sharps_enabled, show_start=True)` — fetches and displays best score for this combo; if show_start=True, enter start screen; if False, start immediately
-- `_poll()` — guarded by `if self._waiting_to_start or self._game_over: return` to prevent scoring before Start
+- `_end_game()` — records score and errors to disk via `score_manager.record_score()`, computes accuracy (score / (score + errors) * 100), refreshes best score, stops timers, shows results overlay with final score, best, errors, and accuracy
+- `_restart()` — called from "Play Again" button; skips start screen, goes straight to gameplay; error counter reset on `activate()`
+- `activate(group_enabled, sharps_enabled, show_start=True)` — fetches and displays best score for this combo; resets errors to 0 and `_last_chord` to None; if show_start=True, enter start screen; if False, start immediately
+- `_poll()` — guarded by `if self._waiting_to_start or self._game_over: return`; ignores chords where `chord is None` or `chord == _last_chord` (debounce); on new distinct chord: if correct and not `_advancing`, triggers green flash and `_advance()`; if wrong (3+ notes), increments `_errors` and updates label
 - Emits `nav_to_mode_select` on back button or "Back to Menu"
 
 ## High Scores page (`high_scores_page.py`)
-- Displays top-10 scores for the selected chord group/sharps combination with timestamps
+- Displays top-10 scores for the selected chord group/sharps combination with timestamps and accuracy %
 - Uses `ChordSettingsWidget` for toggle controls; same at-least-one-group enforcement
-- `_refresh_scores()` called on `settings_changed` signal and `showEvent`; queries `score_manager.get_top_scores()`
-- 10 pre-built rows: rank (fixed 30px) | score (fixed 60px, white text) | datetime (variable, grey text)
-- Empty slots show "—" in score column (grey text `#444444`), empty datetime
+- `_refresh_scores()` called on `settings_changed` signal and `showEvent`; queries `score_manager.get_top_scores()`; computes accuracy as `score / (score + errors) * 100`
+- 10 pre-built rows: rank (fixed 30px) | score (fixed 60px, white text) | accuracy (fixed 70px, grey text) | datetime (variable, grey text)
+- Empty slots show "—" in score column (grey text `#444444`), empty accuracy and datetime
+- Backward compat: entries without `errors` field treated as 0 errors, display 100% accuracy
 - Emits `nav_to_home` on back button
 - Window size: 620×560
 
 ## Score Manager (`score_manager.py`)
 - Pure Python module; no Qt dependencies
 - `settings_key(group_enabled: dict, sharps_enabled: bool) → str` — generates canonical key from enabled group names (sorted) and sharps flag
-- `get_top_scores(group_enabled, sharps_enabled) → list[dict]` — returns up to 10 entries sorted by score descending; each entry is `{score: int, datetime: str}` (ISO-8601)
-- `get_best_score(group_enabled, sharps_enabled) → int | None` — returns highest score for this combo or None
-- `record_score(group_enabled, sharps_enabled, score: int)` — appends new score with `datetime.now()` timestamp, sorts, keeps top 10, writes to `high_scores.json`
-- File format: JSON dict mapping settings keys to sorted score lists; created on first save, silently recovers from corrupt files
+- `get_top_scores(group_enabled, sharps_enabled) → list[dict]` — returns up to 10 entries sorted by score descending then errors ascending; each entry is `{score: int, errors: int, datetime: str}` (ISO-8601)
+- `get_best_score(group_enabled, sharps_enabled) → int | None` — returns highest score for this combo (primary sort) or None
+- `record_score(group_enabled, sharps_enabled, score: int, errors: int = 0)` — appends new entry with score, errors, and `datetime.now()` timestamp; sorts by (score desc, errors asc) to prioritize highest score, then fewest errors on tie; keeps top 10; writes to `high_scores.json`
+- File format: JSON dict mapping settings keys to sorted entry lists; created on first save, silently recovers from corrupt files; backward compat: old entries without `errors` field treated as 0 errors
 
 ## Settings Manager (`settings_manager.py`)
 - Pure Python module; no Qt dependencies

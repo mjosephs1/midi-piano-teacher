@@ -87,6 +87,7 @@ class HighScoresPage(QWidget):
 
         self._rank_labels: list[QLabel] = []
         self._score_value_labels: list[QLabel] = []
+        self._accuracy_labels: list[QLabel] = []
         self._datetime_labels: list[QLabel] = []
 
         for i in range(10):
@@ -105,6 +106,12 @@ class HighScoresPage(QWidget):
             score_lbl.setFont(QFont("Helvetica", 13, QFont.Weight.Bold))
             score_lbl.setStyleSheet("color: #ffffff; background-color: transparent;")
 
+            accuracy_lbl = QLabel("")
+            accuracy_lbl.setFixedWidth(70)
+            accuracy_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            accuracy_lbl.setFont(QFont("Helvetica", 11))
+            accuracy_lbl.setStyleSheet("color: #666666; background-color: transparent;")
+
             date_lbl = QLabel("")
             date_lbl.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             date_lbl.setFont(QFont("Helvetica", 11))
@@ -114,12 +121,15 @@ class HighScoresPage(QWidget):
             row.addSpacing(8)
             row.addWidget(score_lbl)
             row.addSpacing(8)
+            row.addWidget(accuracy_lbl)
+            row.addSpacing(8)
             row.addWidget(date_lbl)
             row.addStretch()
 
             self._scores_container.addLayout(row)
             self._rank_labels.append(rank_lbl)
             self._score_value_labels.append(score_lbl)
+            self._accuracy_labels.append(accuracy_lbl)
             self._datetime_labels.append(date_lbl)
 
         layout.addLayout(self._scores_container)
@@ -129,18 +139,23 @@ class HighScoresPage(QWidget):
         entries = score_manager.get_top_scores(
             self._settings.group_enabled, self._settings.sharps_enabled
         )
-        for i, (rank_lbl, score_lbl, date_lbl) in enumerate(
-            zip(self._rank_labels, self._score_value_labels, self._datetime_labels)
+        for i, (rank_lbl, score_lbl, accuracy_lbl, date_lbl) in enumerate(
+            zip(self._rank_labels, self._score_value_labels, self._accuracy_labels, self._datetime_labels)
         ):
             if i < len(entries):
                 e = entries[i]
+                errors = e.get("errors", 0)
+                total = e["score"] + errors
+                accuracy = int(e["score"] / total * 100) if total > 0 else 100
                 score_lbl.setText(str(e["score"]))
                 score_lbl.setStyleSheet("color: #ffffff; background-color: transparent;")
+                accuracy_lbl.setText(f"{accuracy}%")
                 dt_str = _fmt_dt(e["datetime"])
                 date_lbl.setText(dt_str)
             else:
                 score_lbl.setText("—")
                 score_lbl.setStyleSheet("color: #444444; background-color: transparent;")
+                accuracy_lbl.setText("")
                 date_lbl.setText("")
 
     def showEvent(self, event):

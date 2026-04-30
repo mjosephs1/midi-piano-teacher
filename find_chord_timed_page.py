@@ -31,6 +31,8 @@ class FindChordTimedPage(QWidget):
         self._queue = []
         self._score = 0
         self._best_score: int | None = None
+        self._errors: int = 0
+        self._last_chord: str | None = None
         self._time_remaining = _GAME_DURATION_SECS
         self._group_enabled = {}
         self._sharps_enabled = True
@@ -80,6 +82,12 @@ class FindChordTimedPage(QWidget):
         self._best_label.setFont(QFont("Helvetica", 14))
         top_row.addSpacing(16)
         top_row.addWidget(self._best_label)
+
+        self._errors_label = QLabel("Errors: 0")
+        self._errors_label.setStyleSheet("color: #aaaaaa; background-color: transparent;")
+        self._errors_label.setFont(QFont("Helvetica", 14))
+        top_row.addSpacing(16)
+        top_row.addWidget(self._errors_label)
         layout.addLayout(top_row)
 
         layout.addSpacing(8)
@@ -213,6 +221,18 @@ class FindChordTimedPage(QWidget):
         self._results_best_label.setFont(QFont("Helvetica", 16))
         overlay_layout.addWidget(self._results_best_label)
 
+        self._results_errors_label = QLabel("Errors: 0")
+        self._results_errors_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._results_errors_label.setStyleSheet("color: #aaaaaa; background-color: transparent;")
+        self._results_errors_label.setFont(QFont("Helvetica", 16))
+        overlay_layout.addWidget(self._results_errors_label)
+
+        self._results_accuracy_label = QLabel("Accuracy: 100%")
+        self._results_accuracy_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._results_accuracy_label.setStyleSheet("color: #aaaaaa; background-color: transparent;")
+        self._results_accuracy_label.setFont(QFont("Helvetica", 16))
+        overlay_layout.addWidget(self._results_accuracy_label)
+
         overlay_layout.addSpacing(20)
 
         play_again_btn = QPushButton("Play Again")
@@ -306,6 +326,9 @@ class FindChordTimedPage(QWidget):
         self._score_label.setText("Score: 0")
         self._best_score = score_manager.get_best_score(self._group_enabled, self._sharps_enabled)
         self._best_label.setText(f"Best: {self._best_score}" if self._best_score is not None else "Best: —")
+        self._errors = 0
+        self._last_chord = None
+        self._errors_label.setText("Errors: 0")
         self._time_label.setText("60s")
         self._time_label.setStyleSheet("color: #ffffff; background-color: transparent;")
         self._playing_label.setText("--")
@@ -372,11 +395,15 @@ class FindChordTimedPage(QWidget):
         self._game_over = True
         self._countdown_timer.stop()
         self._poll_timer.stop()
-        score_manager.record_score(self._group_enabled, self._sharps_enabled, self._score)
+        score_manager.record_score(self._group_enabled, self._sharps_enabled, self._score, self._errors)
         self._best_score = score_manager.get_best_score(self._group_enabled, self._sharps_enabled)
         self._best_label.setText(f"Best: {self._best_score}" if self._best_score is not None else "Best: —")
+        total = self._score + self._errors
+        accuracy = int(self._score / total * 100) if total > 0 else 100
         self._results_score_label.setText(f"Score: {self._score}")
         self._results_best_label.setText(f"Best: {self._best_score}" if self._best_score is not None else "Best: —")
+        self._results_errors_label.setText(f"Errors: {self._errors}")
+        self._results_accuracy_label.setText(f"Accuracy: {accuracy}%")
         self._results_overlay.setGeometry(self.rect())
         self._results_overlay.raise_()
         self._results_overlay.show()
@@ -396,10 +423,22 @@ class FindChordTimedPage(QWidget):
         chord = identify_chord(notes) if notes else None
         self._playing_label.setText(chord if chord else "--")
 
-        if chord and not self._advancing and self._queue and chord == self._queue[0]:
+        # Ignore if no recognized chord or same chord as last time
+        if chord is None or chord == self._last_chord:
+            return
+
+        self._last_chord = chord
+
+        if self._advancing or not self._queue:
+            return
+
+        if chord == self._queue[0]:
             self._chord_labels[0].setStyleSheet("color: #44ff44; background-color: transparent;")
             self._advancing = True
             QTimer.singleShot(_GREEN_DURATION_MS, self._advance)
+        elif len(notes) >= 3:
+            self._errors += 1
+            self._errors_label.setText(f"Errors: {self._errors}")
 
     def _advance(self):
         if self._game_over:

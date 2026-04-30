@@ -35,11 +35,11 @@ def get_best_score(group_enabled: dict, sharps_enabled: bool) -> int | None:
     return scores[0]["score"] if scores else None
 
 
-def record_score(group_enabled: dict, sharps_enabled: bool, score: int) -> None:
+def record_score(group_enabled: dict, sharps_enabled: bool, score: int, errors: int = 0) -> None:
     data = _load()
     key = settings_key(group_enabled, sharps_enabled)
     entries = data.get(key, [])
-    entries.append({"score": score, "datetime": datetime.now().isoformat(timespec="seconds")})
-    entries.sort(key=lambda e: e["score"], reverse=True)
+    entries.append({"score": score, "errors": errors, "datetime": datetime.now().isoformat(timespec="seconds")})
+    entries.sort(key=lambda e: (e["score"], -e.get("errors", 0)), reverse=True)
     data[key] = entries[:MAX_SCORES]
     _save(data)
