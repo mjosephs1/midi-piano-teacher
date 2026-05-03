@@ -32,7 +32,7 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 - Navigation is signal-driven: pages emit `pyqtSignal` → `MainWindow` handles routing and window resizing
 - Device: auto-selects first available MIDI input port
 - Window sizes: home=(420, 390), midi_display=(420, 220), find_chord_mode=(620, 450), find_chord=(620, 440), find_chord_timed=(620, 440), high_scores=(620, 560)
-- High scores are stored in `high_scores.json` (git-ignored), keyed by `{enabled_group_names}|sharps={true|false}`; top 10 per key
+- Score history is stored in `score_history.json` (git-ignored), keyed by `{enabled_group_names}|sharps={true|false}`; full history per key; top 10 returned for display
 
 ## Chord Settings Widget (`chord_settings_widget.py`)
 - Reusable toggle UI for chord groups + sharps; used by `FindChordModePage` and `HighScoresPage`
@@ -101,7 +101,7 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 - `settings_key(group_enabled: dict, sharps_enabled: bool) → str` — generates canonical key from enabled group names (sorted) and sharps flag
 - `get_top_scores(group_enabled, sharps_enabled) → list[dict]` — returns up to 10 entries sorted by score descending then errors ascending; each entry is `{score: int, errors: int, datetime: str}` (ISO-8601)
 - `get_best_score(group_enabled, sharps_enabled) → int | None` — returns highest score for this combo (primary sort) or None
-- `record_score(group_enabled, sharps_enabled, score: int, errors: int = 0)` — appends new entry with score, errors, and `datetime.now()` timestamp; sorts by (score desc, errors asc) to prioritize highest score, then fewest errors on tie; keeps top 10; writes to `high_scores.json`
+- `record_score(group_enabled, sharps_enabled, score: int, errors: int = 0)` — appends new entry with score, errors, and `datetime.now()` timestamp; sorts by (score desc, errors asc) to prioritize highest score, then fewest errors on tie; keeps full history; writes to `score_history.json`
 - File format: JSON dict mapping settings keys to sorted entry lists; created on first save, silently recovers from corrupt files; backward compat: old entries without `errors` field treated as 0 errors
 
 ## Settings Manager (`settings_manager.py`)

@@ -2,8 +2,7 @@ import json
 import os
 from datetime import datetime
 
-SCORES_FILE = "high_scores.json"
-MAX_SCORES = 10
+SCORES_FILE = "score_history.json"
 
 
 def settings_key(group_enabled: dict, sharps_enabled: bool) -> str:
@@ -27,7 +26,7 @@ def _save(data: dict) -> None:
 
 
 def get_top_scores(group_enabled: dict, sharps_enabled: bool) -> list[dict]:
-    return _load().get(settings_key(group_enabled, sharps_enabled), [])
+    return _load().get(settings_key(group_enabled, sharps_enabled), [])[:10]
 
 
 def get_best_score(group_enabled: dict, sharps_enabled: bool) -> int | None:
@@ -41,5 +40,5 @@ def record_score(group_enabled: dict, sharps_enabled: bool, score: int, errors: 
     entries = data.get(key, [])
     entries.append({"score": score, "errors": errors, "datetime": datetime.now().isoformat(timespec="seconds")})
     entries.sort(key=lambda e: (e["score"], -e.get("errors", 0)), reverse=True)
-    data[key] = entries[:MAX_SCORES]
+    data[key] = entries
     _save(data)
