@@ -35,7 +35,7 @@ class FindChordTimedPage(QWidget):
         self._last_chord: str | None = None
         self._time_remaining = _GAME_DURATION_SECS
         self._group_enabled = {}
-        self._sharps_enabled = True
+        self._sharps_mode = "include"
 
         self._poll_timer = QTimer()
         self._poll_timer.timeout.connect(self._poll)
@@ -296,16 +296,19 @@ class FindChordTimedPage(QWidget):
         return queue
 
     def _random_chord(self, exclude: str | None = None) -> str:
-        suffixes = [s for sl in CHORD_GROUPS.values() for s in sl]
-        roots = NOTE_NAMES if self._sharps_enabled else [n for n in NOTE_NAMES if "#" not in n]
-        enabled_roots = roots
+        if self._sharps_mode == "exclude":
+            roots = [n for n in NOTE_NAMES if "#" not in n]
+        elif self._sharps_mode == "only":
+            roots = [n for n in NOTE_NAMES if "#" in n]
+        else:  # "include"
+            roots = NOTE_NAMES
         enabled_suffixes = [s for name, sl in CHORD_GROUPS.items() if self._group_enabled.get(name, True) for s in sl]
-        chord = f"{random.choice(enabled_roots)}{random.choice(enabled_suffixes)}"
-        while exclude is not None and chord == exclude and len(enabled_roots) * len(enabled_suffixes) > 1:
-            chord = f"{random.choice(enabled_roots)}{random.choice(enabled_suffixes)}"
+        chord = f"{random.choice(roots)}{random.choice(enabled_suffixes)}"
+        while exclude is not None and chord == exclude and len(roots) * len(enabled_suffixes) > 1:
+            chord = f"{random.choice(roots)}{random.choice(enabled_suffixes)}"
         return chord
 
-    def activate(self, group_enabled: dict[str, bool], sharps_enabled: bool, show_start: bool = True):
+    def activate(self, group_enabled: dict[str, bool], sharps_mode: str, show_start: bool = True):
         if self._active:
             return
         ports = mido.get_input_names()
@@ -315,7 +318,7 @@ class FindChordTimedPage(QWidget):
             return
 
         self._group_enabled = group_enabled.copy()
-        self._sharps_enabled = sharps_enabled
+        self._sharps_mode = sharps_mode
         self._active = True
         self._game_over = False
         self._advancing = False
@@ -324,7 +327,7 @@ class FindChordTimedPage(QWidget):
         self.active_notes = set()
 
         self._score_label.setText("Score: 0")
-        self._best_score = score_manager.get_best_score(self._group_enabled, self._sharps_enabled)
+        self._best_score = score_manager.get_best_score(self._group_enabled, self._sharps_mode)
         self._best_label.setText(f"Best: {self._best_score}" if self._best_score is not None else "Best: —")
         self._errors = 0
         self._last_chord = None
@@ -395,8 +398,8 @@ class FindChordTimedPage(QWidget):
         self._game_over = True
         self._countdown_timer.stop()
         self._poll_timer.stop()
-        score_manager.record_score(self._group_enabled, self._sharps_enabled, self._score, self._errors)
-        self._best_score = score_manager.get_best_score(self._group_enabled, self._sharps_enabled)
+        score_manager.record_score(self._group_enabled, self._sharps_mode, self._score, self._errors)
+        self._best_score = score_manager.get_best_score(self._group_enabled, self._sharps_mode)
         self._best_label.setText(f"Best: {self._best_score}" if self._best_score is not None else "Best: —")
         total = self._score + self._errors
         accuracy = int(self._score / total * 100) if total > 0 else 100
@@ -411,7 +414,7 @@ class FindChordTimedPage(QWidget):
     def _restart(self):
         self._results_overlay.hide()
         self.deactivate()
-        self.activate(self._group_enabled, self._sharps_enabled, show_start=False)
+        self.activate(self._group_enabled, self._sharps_mode, show_start=False)
 
     def _poll(self):
         if self._waiting_to_start or self._game_over:

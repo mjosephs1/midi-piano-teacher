@@ -48,7 +48,7 @@ class FindChordPage(QWidget):
         self._advancing = False
         self._queue = []
         self._group_enabled = {}
-        self._sharps_enabled = True
+        self._sharps_mode = "include"
 
         self._timer = QTimer()
         self._timer.timeout.connect(self._poll)
@@ -158,8 +158,12 @@ class FindChordPage(QWidget):
                 lbl.setStyleSheet("color: #888888; background-color: transparent;")
 
     def _available_roots(self) -> list[str]:
-        roots = NOTE_NAMES if self._sharps_enabled else [n for n in NOTE_NAMES if "#" not in n]
-        return roots
+        if self._sharps_mode == "exclude":
+            return [n for n in NOTE_NAMES if "#" not in n]
+        elif self._sharps_mode == "only":
+            return [n for n in NOTE_NAMES if "#" in n]
+        else:  # "include"
+            return NOTE_NAMES
 
     def _build_queue(self) -> list[str]:
         queue = []
@@ -176,7 +180,7 @@ class FindChordPage(QWidget):
             chord = f"{random.choice(roots)}{random.choice(suffixes)}"
         return chord
 
-    def activate(self, group_enabled: dict[str, bool], sharps_enabled: bool):
+    def activate(self, group_enabled: dict[str, bool], sharps_mode: str):
         if self._active:
             return
         ports = mido.get_input_names()
@@ -185,7 +189,7 @@ class FindChordPage(QWidget):
                 "No MIDI input devices found.\nConnect a device and try again.")
             return
         self._group_enabled = group_enabled.copy()
-        self._sharps_enabled = sharps_enabled
+        self._sharps_mode = sharps_mode
         self._active = True
         self._advancing = False
         self.active_notes = set()

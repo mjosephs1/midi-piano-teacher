@@ -114,8 +114,8 @@ class FindChordModePage(QWidget):
         return self._settings.group_enabled
 
     @property
-    def sharps_enabled(self) -> bool:
-        return self._settings.sharps_enabled
+    def sharps_mode(self) -> str:
+        return self._settings.sharps_mode
 
     def _on_back(self):
         self.nav_to_home.emit()

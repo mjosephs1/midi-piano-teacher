@@ -137,7 +137,7 @@ class HighScoresPage(QWidget):
 
     def _refresh_scores(self) -> None:
         entries = score_manager.get_top_scores(
-            self._settings.group_enabled, self._settings.sharps_enabled
+            self._settings.group_enabled, self._settings.sharps_mode
         )
         for i, (rank_lbl, score_lbl, accuracy_lbl, date_lbl) in enumerate(
             zip(self._rank_labels, self._score_value_labels, self._accuracy_labels, self._datetime_labels)

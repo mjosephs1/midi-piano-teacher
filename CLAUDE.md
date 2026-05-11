@@ -32,23 +32,23 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 - Navigation is signal-driven: pages emit `pyqtSignal` → `MainWindow` handles routing and window resizing
 - Device: auto-selects first available MIDI input port
 - Window sizes: home=(420, 390), midi_display=(420, 220), find_chord_mode=(620, 450), find_chord=(620, 440), find_chord_timed=(620, 440), high_scores=(620, 560)
-- Score history is stored in `score_history.json` (git-ignored), keyed by `{enabled_group_names}|sharps={true|false}`; full history per key; top 10 returned for display
+- Score history is stored in `score_history.json` (git-ignored), keyed by `{enabled_group_names}|sharps={include|exclude|only}`; full history per key; top 10 returned for display
 
 ## Chord Settings Widget (`chord_settings_widget.py`)
-- Reusable toggle UI for chord groups + sharps; used by `FindChordModePage` and `HighScoresPage`
+- Reusable toggle UI for chord groups + sharps mode; used by `FindChordModePage` and `HighScoresPage`
 - On init: loads saved settings from `chord_settings.json` via `settings_manager.load_chord_settings()`; falls back to all-enabled defaults if file missing/corrupt
 - On `showEvent`: reloads settings from disk (via `_reload_settings_from_disk()`) to stay in sync across multiple widget instances; button states updated without triggering signals
-- Owns `_group_enabled: dict[str, bool]` and `_sharps_enabled: bool`; button states initialized from loaded settings (with `blockSignals` to prevent spurious init signals)
-- Two rows of toggle buttons (5 per row) for chord groups + "Sharps" button below
+- Owns `_group_enabled: dict[str, bool]` and `_sharps_mode: str` (one of `"exclude"`, `"include"`, `"only"`); button states initialized from loaded settings (with `blockSignals` to prevent spurious init signals)
+- Two rows of toggle buttons (5 per row) for chord groups + three exclusive radio buttons below for sharps mode ("No Sharps", "With Sharps", "Sharps Only")
 - Enforces at-least-one-group constraint: if only one group is enabled, disallow unchecking it
 - On every toggle: calls `settings_manager.save_chord_settings()` to persist new state
 - Emits `settings_changed` signal on any toggle change (after save)
-- Exposes read-only properties: `group_enabled` (dict copy), `sharps_enabled` (bool)
+- Exposes read-only properties: `group_enabled` (dict copy), `sharps_mode` (str)
 
 ## Find the Chord Mode page (`find_chord_mode_page.py`)
 - Route selection screen: two buttons for Infinite and Timed modes
 - Delegates chord settings to `ChordSettingsWidget` (stored as `self._settings`)
-- Exposes read-only properties: `group_enabled` (proxies to `self._settings`), `sharps_enabled` (proxies to `self._settings`)
+- Exposes read-only properties: `group_enabled` (proxies to `self._settings`), `sharps_mode` (proxies to `self._settings`)
 - Settings are passed to both `FindChordPage` and `FindChordTimedPage` at `activate()` time
 - Window size: 620×450
 
@@ -57,10 +57,10 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 - Displays the first 5 chords in a row; leftmost is the current target (larger font, white); others are dimmer/smaller
 - On correct chord match: target label turns green (`#44ff44`) for 500ms, then queue shifts left via `_advance()`
 - `_advancing: bool` flag blocks re-triggering during the green flash
-- `_group_enabled: dict[str, bool]`, `_sharps_enabled: bool` — set by `activate()` from FindChordModePage
-- `_available_roots()` — returns filtered list of root notes based on `_sharps_enabled`
-- `_random_chord()` picks a random root and suffix, respecting enabled groups and sharps setting
-- `activate(group_enabled: dict, sharps_enabled: bool)` — stores settings and starts MIDI playback
+- `_group_enabled: dict[str, bool]`, `_sharps_mode: str` — set by `activate()` from FindChordModePage
+- `_available_roots()` — returns filtered list of root notes: all 12 if `"include"`, only naturals (7) if `"exclude"`, only sharps (5) if `"only"`
+- `_random_chord()` picks a random root and suffix, respecting enabled groups and sharps mode
+- `activate(group_enabled: dict, sharps_mode: str)` — stores settings and starts MIDI playback
 - "Playing" label shows the currently detected chord so the user knows what they're playing if wrong
 - Emits `nav_to_mode_select` on back button
 
@@ -77,12 +77,12 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 - `_time_remaining: int` — counts down from 60 to 0; label turns red (`#ff4444`) at ≤10 seconds
 - `_game_over: bool` — set to `True` when timer reaches 0; blocks `_poll()` and `_advance()` from further scoring
 - Two timers: `_poll_timer` (50ms, runs always) and `_countdown_timer` (1000ms, starts on Start or Play Again)
-- `_group_enabled`, `_sharps_enabled` — set by `activate()` from FindChordModePage
+- `_group_enabled`, `_sharps_mode` — set by `activate()` from FindChordModePage
 - `_start_game()` — called on Start button click; shows chord queue, starts countdown
 - `_tick()` — decrements `_time_remaining`; calls `_end_game()` at 0
 - `_end_game()` — records score and errors to disk via `score_manager.record_score()`, computes accuracy (score / (score + errors) * 100), refreshes best score, stops timers, shows results overlay with final score, best, errors, and accuracy
 - `_restart()` — called from "Play Again" button; skips start screen, goes straight to gameplay; error counter reset on `activate()`
-- `activate(group_enabled, sharps_enabled, show_start=True)` — fetches and displays best score for this combo; resets errors to 0 and `_last_chord` to None; if show_start=True, enter start screen; if False, start immediately
+- `activate(group_enabled, sharps_mode, show_start=True)` — fetches and displays best score for this combo; resets errors to 0 and `_last_chord` to None; if show_start=True, enter start screen; if False, start immediately
 - `_poll()` — guarded by `if self._waiting_to_start or self._game_over: return`; ignores chords where `chord is None` or `chord == _last_chord` (debounce); on new distinct chord: if correct and not `_advancing`, triggers green flash and `_advance()`; if wrong (3+ notes), increments `_errors` and updates label
 - Emits `nav_to_mode_select` on back button or "Back to Menu"
 
@@ -98,17 +98,17 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 
 ## Score Manager (`score_manager.py`)
 - Pure Python module; no Qt dependencies
-- `settings_key(group_enabled: dict, sharps_enabled: bool) → str` — generates canonical key from enabled group names (sorted) and sharps flag
-- `get_top_scores(group_enabled, sharps_enabled) → list[dict]` — returns up to 10 entries sorted by score descending then errors ascending; each entry is `{score: int, errors: int, datetime: str}` (ISO-8601)
-- `get_best_score(group_enabled, sharps_enabled) → int | None` — returns highest score for this combo (primary sort) or None
-- `record_score(group_enabled, sharps_enabled, score: int, errors: int = 0)` — appends new entry with score, errors, and `datetime.now()` timestamp; sorts by (score desc, errors asc) to prioritize highest score, then fewest errors on tie; keeps full history; writes to `score_history.json`
+- `settings_key(group_enabled: dict, sharps_mode: str) → str` — generates canonical key from enabled group names (sorted) and sharps mode (`"include"`, `"exclude"`, or `"only"`)
+- `get_top_scores(group_enabled, sharps_mode) → list[dict]` — returns up to 10 entries sorted by score descending then errors ascending; each entry is `{score: int, errors: int, datetime: str}` (ISO-8601)
+- `get_best_score(group_enabled, sharps_mode) → int | None` — returns highest score for this combo (primary sort) or None
+- `record_score(group_enabled, sharps_mode, score: int, errors: int = 0)` — appends new entry with score, errors, and `datetime.now()` timestamp; sorts by (score desc, errors asc) to prioritize highest score, then fewest errors on tie; keeps full history; writes to `score_history.json`
 - File format: JSON dict mapping settings keys to sorted entry lists; created on first save, silently recovers from corrupt files; backward compat: old entries without `errors` field treated as 0 errors
 
 ## Settings Manager (`settings_manager.py`)
 - Pure Python module; no Qt dependencies
 - `load_chord_settings(group_names: list[str]) → dict` — returns saved settings from `chord_settings.json`, falling back to all-enabled defaults on any error (file missing, corrupt, or new groups added)
-- `save_chord_settings(group_enabled: dict, sharps_enabled: bool) → None` — writes settings to `chord_settings.json`
-- File format: JSON with `{"group_enabled": {group_name: bool, ...}, "sharps_enabled": bool}`; created on first toggle change
+- `save_chord_settings(group_enabled: dict, sharps_mode: str) → None` — writes settings to `chord_settings.json`
+- File format: JSON with `{"group_enabled": {group_name: bool, ...}, "sharps_mode": "include"|"exclude"|"only"}`; created on first toggle change
 
 ## Styling conventions
 - On macOS, PyQt6 does not automatically inherit the parent's `background-color` stylesheet. Any child `QWidget` or `QLabel` inside a dark-background parent must explicitly set `background-color: transparent;` in its own stylesheet, otherwise it renders with the system default (visibly lighter or darker).

@@ -5,9 +5,9 @@ from datetime import datetime
 SCORES_FILE = "score_history.json"
 
 
-def settings_key(group_enabled: dict, sharps_enabled: bool) -> str:
+def settings_key(group_enabled: dict, sharps_mode: str) -> str:
     enabled = sorted(k for k, v in group_enabled.items() if v)
-    return ",".join(enabled) + f"|sharps={'true' if sharps_enabled else 'false'}"
+    return ",".join(enabled) + f"|sharps={sharps_mode}"
 
 
 def _load() -> dict:
@@ -25,18 +25,18 @@ def _save(data: dict) -> None:
         json.dump(data, f, indent=2)
 
 
-def get_top_scores(group_enabled: dict, sharps_enabled: bool) -> list[dict]:
-    return _load().get(settings_key(group_enabled, sharps_enabled), [])[:10]
+def get_top_scores(group_enabled: dict, sharps_mode: str) -> list[dict]:
+    return _load().get(settings_key(group_enabled, sharps_mode), [])[:10]
 
 
-def get_best_score(group_enabled: dict, sharps_enabled: bool) -> int | None:
-    scores = get_top_scores(group_enabled, sharps_enabled)
+def get_best_score(group_enabled: dict, sharps_mode: str) -> int | None:
+    scores = get_top_scores(group_enabled, sharps_mode)
     return scores[0]["score"] if scores else None
 
 
-def record_score(group_enabled: dict, sharps_enabled: bool, score: int, errors: int = 0) -> None:
+def record_score(group_enabled: dict, sharps_mode: str, score: int, errors: int = 0) -> None:
     data = _load()
-    key = settings_key(group_enabled, sharps_enabled)
+    key = settings_key(group_enabled, sharps_mode)
     entries = data.get(key, [])
     entries.append({"score": score, "errors": errors, "datetime": datetime.now().isoformat(timespec="seconds")})
     entries.sort(key=lambda e: (e["score"], -e.get("errors", 0)), reverse=True)

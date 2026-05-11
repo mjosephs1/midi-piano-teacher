@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QButtonGroup
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QFont
 
@@ -16,7 +16,7 @@ class ChordSettingsWidget(QWidget):
     def _reload_settings_from_disk(self):
         saved = settings_manager.load_chord_settings(list(CHORD_GROUPS.keys()))
         self._group_enabled = saved["group_enabled"]
-        self._sharps_enabled = saved["sharps_enabled"]
+        self._sharps_mode = saved["sharps_mode"]
 
         for group_name, btn in self._group_buttons.items():
             btn.blockSignals(True)
@@ -24,10 +24,11 @@ class ChordSettingsWidget(QWidget):
             btn.blockSignals(False)
             btn.setStyleSheet(_toggle_style(checked=self._group_enabled[group_name]))
 
-        self._sharps_btn.blockSignals(True)
-        self._sharps_btn.setChecked(self._sharps_enabled)
-        self._sharps_btn.blockSignals(False)
-        self._sharps_btn.setStyleSheet(_toggle_style(checked=self._sharps_enabled))
+        for mode, btn in self._sharps_buttons.items():
+            btn.blockSignals(True)
+            btn.setChecked(self._sharps_mode == mode)
+            btn.blockSignals(False)
+            btn.setStyleSheet(_toggle_style(checked=self._sharps_mode == mode))
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -35,7 +36,7 @@ class ChordSettingsWidget(QWidget):
         saved = settings_manager.load_chord_settings(list(CHORD_GROUPS.keys()))
         self._group_enabled = saved["group_enabled"]
         self._group_buttons: dict[str, QPushButton] = {}
-        self._sharps_enabled = saved["sharps_enabled"]
+        self._sharps_mode = saved["sharps_mode"]
         self._build_ui()
 
     def _build_ui(self):
@@ -67,16 +68,28 @@ class ChordSettingsWidget(QWidget):
         layout.addSpacing(4)
         sharps_row = QHBoxLayout()
         sharps_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._sharps_btn = QPushButton("Sharps")
-        self._sharps_btn.setCheckable(True)
-        self._sharps_btn.blockSignals(True)
-        self._sharps_btn.setChecked(self._sharps_enabled)
-        self._sharps_btn.blockSignals(False)
-        self._sharps_btn.setFixedHeight(26)
-        self._sharps_btn.setFont(QFont("Helvetica", 11))
-        self._sharps_btn.setStyleSheet(_toggle_style(checked=self._sharps_enabled))
-        self._sharps_btn.toggled.connect(self._on_sharps_toggled)
-        sharps_row.addWidget(self._sharps_btn)
+        sharps_row.setSpacing(6)
+
+        self._sharps_btn_group = QButtonGroup()
+        self._sharps_btn_group.setExclusive(True)
+
+        modes = [("No Sharps", "exclude"), ("With Sharps", "include"), ("Sharps Only", "only")]
+        self._sharps_buttons: dict[str, QPushButton] = {}
+
+        for button_id, (label, mode) in enumerate(modes):
+            btn = QPushButton(label)
+            btn.setCheckable(True)
+            btn.blockSignals(True)
+            btn.setChecked(self._sharps_mode == mode)
+            btn.blockSignals(False)
+            btn.setFixedHeight(26)
+            btn.setFont(QFont("Helvetica", 11))
+            btn.setStyleSheet(_toggle_style(checked=self._sharps_mode == mode))
+            btn.toggled.connect(lambda checked, m=mode: self._on_sharps_mode_selected(m, checked))
+            self._sharps_btn_group.addButton(btn, button_id)
+            self._sharps_buttons[mode] = btn
+            sharps_row.addWidget(btn)
+
         layout.addLayout(sharps_row)
 
     def _on_group_toggled(self, name: str, checked: bool) -> None:
@@ -89,13 +102,16 @@ class ChordSettingsWidget(QWidget):
             return
         self._group_enabled[name] = checked
         self._group_buttons[name].setStyleSheet(_toggle_style(checked=checked))
-        settings_manager.save_chord_settings(self._group_enabled, self._sharps_enabled)
+        settings_manager.save_chord_settings(self._group_enabled, self._sharps_mode)
         self.settings_changed.emit()
 
-    def _on_sharps_toggled(self, checked: bool) -> None:
-        self._sharps_enabled = checked
-        self._sharps_btn.setStyleSheet(_toggle_style(checked=checked))
-        settings_manager.save_chord_settings(self._group_enabled, self._sharps_enabled)
+    def _on_sharps_mode_selected(self, mode: str, checked: bool) -> None:
+        if not checked:
+            return
+        self._sharps_mode = mode
+        for m, btn in self._sharps_buttons.items():
+            btn.setStyleSheet(_toggle_style(checked=(m == mode)))
+        settings_manager.save_chord_settings(self._group_enabled, self._sharps_mode)
         self.settings_changed.emit()
 
     @property
@@ -103,5 +119,5 @@ class ChordSettingsWidget(QWidget):
         return self._group_enabled.copy()
 
     @property
-    def sharps_enabled(self) -> bool:
-        return self._sharps_enabled
+    def sharps_mode(self) -> str:
+        return self._sharps_mode
