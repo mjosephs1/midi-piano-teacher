@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, Q
 from PyQt6.QtCore import QTimer, pyqtSignal, Qt
 from PyQt6.QtGui import QFont
 
-from midi_display import NOTE_NAMES, CHORD_PATTERNS, identify_chord
+from midi_display import NOTE_NAMES, CHORD_PATTERNS, identify_chord, count_chord_instances
 from find_chord_page import CHORD_GROUPS
 import score_manager
 
@@ -36,6 +36,7 @@ class FindChordTimedPage(QWidget):
         self._time_remaining = _GAME_DURATION_SECS
         self._group_enabled = {}
         self._sharps_mode = "include"
+        self._hands_enabled = {"left": False, "right": True}
 
         self._poll_timer = QTimer()
         self._poll_timer.timeout.connect(self._poll)
@@ -308,7 +309,7 @@ class FindChordTimedPage(QWidget):
             chord = f"{random.choice(roots)}{random.choice(enabled_suffixes)}"
         return chord
 
-    def activate(self, group_enabled: dict[str, bool], sharps_mode: str, show_start: bool = True):
+    def activate(self, group_enabled: dict[str, bool], sharps_mode: str, hands_enabled: dict[str, bool], show_start: bool = True):
         if self._active:
             return
         ports = mido.get_input_names()
@@ -319,6 +320,7 @@ class FindChordTimedPage(QWidget):
 
         self._group_enabled = group_enabled.copy()
         self._sharps_mode = sharps_mode
+        self._hands_enabled = hands_enabled.copy()
         self._active = True
         self._game_over = False
         self._advancing = False
@@ -327,7 +329,7 @@ class FindChordTimedPage(QWidget):
         self.active_notes = set()
 
         self._score_label.setText("Score: 0")
-        self._best_score = score_manager.get_best_score(self._group_enabled, self._sharps_mode)
+        self._best_score = score_manager.get_best_score(self._group_enabled, self._sharps_mode, self._hands_enabled)
         self._best_label.setText(f"Best: {self._best_score}" if self._best_score is not None else "Best: —")
         self._errors = 0
         self._last_chord = None
@@ -398,8 +400,8 @@ class FindChordTimedPage(QWidget):
         self._game_over = True
         self._countdown_timer.stop()
         self._poll_timer.stop()
-        score_manager.record_score(self._group_enabled, self._sharps_mode, self._score, self._errors)
-        self._best_score = score_manager.get_best_score(self._group_enabled, self._sharps_mode)
+        score_manager.record_score(self._group_enabled, self._sharps_mode, self._score, self._errors, self._hands_enabled)
+        self._best_score = score_manager.get_best_score(self._group_enabled, self._sharps_mode, self._hands_enabled)
         self._best_label.setText(f"Best: {self._best_score}" if self._best_score is not None else "Best: —")
         total = self._score + self._errors
         accuracy = int(self._score / total * 100) if total > 0 else 100
@@ -414,7 +416,7 @@ class FindChordTimedPage(QWidget):
     def _restart(self):
         self._results_overlay.hide()
         self.deactivate()
-        self.activate(self._group_enabled, self._sharps_mode, show_start=False)
+        self.activate(self._group_enabled, self._sharps_mode, self._hands_enabled, show_start=False)
 
     def _poll(self):
         if self._waiting_to_start or self._game_over:
@@ -435,7 +437,15 @@ class FindChordTimedPage(QWidget):
         if self._advancing or not self._queue:
             return
 
-        if chord == self._queue[0]:
+        target = self._queue[0]
+        matched = False
+
+        if self._hands_enabled.get("left") and self._hands_enabled.get("right"):
+            matched = count_chord_instances(set(notes), target) >= 2
+        else:
+            matched = chord == target
+
+        if matched:
             self._chord_labels[0].setStyleSheet("color: #44ff44; background-color: transparent;")
             self._advancing = True
             QTimer.singleShot(_GREEN_DURATION_MS, self._advance)

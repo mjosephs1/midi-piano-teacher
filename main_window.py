@@ -71,12 +71,12 @@ class MainWindow(QMainWindow):
     def _go_to_find_chord(self):
         self._stack.setCurrentWidget(self._find_chord)
         self.setFixedSize(*_FIND_CHORD_SIZE)
-        self._find_chord.activate(self._find_chord_mode.group_enabled, self._find_chord_mode.sharps_mode)
+        self._find_chord.activate(self._find_chord_mode.group_enabled, self._find_chord_mode.sharps_mode, self._find_chord_mode.hands_enabled)
 
     def _go_to_find_chord_timed(self):
         self._stack.setCurrentWidget(self._find_chord_timed)
         self.setFixedSize(*_FIND_CHORD_TIMED_SIZE)
-        self._find_chord_timed.activate(self._find_chord_mode.group_enabled, self._find_chord_mode.sharps_mode)
+        self._find_chord_timed.activate(self._find_chord_mode.group_enabled, self._find_chord_mode.sharps_mode, self._find_chord_mode.hands_enabled)
 
     def _go_to_high_scores(self):
         self._stack.setCurrentWidget(self._high_scores)

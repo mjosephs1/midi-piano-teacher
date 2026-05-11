@@ -70,6 +70,53 @@ def identify_chord(midi_notes):
 
     return None
 
+def count_chord_instances(active_notes, target_chord):
+    if not target_chord or not active_notes:
+        return 0
+
+    if len(active_notes) < 2:
+        return 0
+
+    root_name = target_chord[0]
+    if target_chord.startswith("C#"):
+        root_name = "C#"
+    elif target_chord.startswith("D#"):
+        root_name = "D#"
+    elif target_chord.startswith("F#"):
+        root_name = "F#"
+    elif target_chord.startswith("G#"):
+        root_name = "G#"
+    elif target_chord.startswith("A#"):
+        root_name = "A#"
+
+    root_idx = NOTE_NAMES.index(root_name) if root_name in NOTE_NAMES else -1
+    if root_idx == -1:
+        return 0
+
+    suffix = target_chord[len(root_name):]
+    intervals = None
+    for pattern, suffix_str in CHORD_PATTERNS.items():
+        if suffix_str == suffix:
+            intervals = pattern
+            break
+
+    if intervals is None:
+        return 0
+
+    required_pitch_classes = {(root_idx + i) % 12 for i in intervals}
+    required_pitch_classes.add(root_idx)
+
+    counts = defaultdict(int)
+    for midi_note in active_notes:
+        pitch_class = midi_note % 12
+        if pitch_class in required_pitch_classes:
+            counts[pitch_class] += 1
+
+    if len(counts) < len(required_pitch_classes):
+        return 0
+
+    return min(counts[pc] for pc in required_pitch_classes)
+
 def format_display(active_notes):
     if not active_notes:
         return "  Notes:  --\n  Chord:  --"

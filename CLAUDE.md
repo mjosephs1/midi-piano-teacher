@@ -20,6 +20,7 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 ## Key functions in `midi_display.py`
 - `midi_to_note(midi_num)` → `(name, octave)` — converts MIDI number to note name/octave
 - `identify_chord(midi_notes)` → `str | None` — chord detection from a list of MIDI numbers; tries all inversions, falls back to subset matching
+- `count_chord_instances(active_notes: set, target_chord: str) → int` — counts how many independent instances of the target chord appear in the active notes using pitch-class counting; returns 0 if target not found or not enough notes
 - `NOTE_NAMES` — 12-element list of note name strings
 - `CHORD_PATTERNS` — dict mapping semitone interval tuples to chord name suffixes (18 chord types)
 
@@ -32,23 +33,23 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 - Navigation is signal-driven: pages emit `pyqtSignal` → `MainWindow` handles routing and window resizing
 - Device: auto-selects first available MIDI input port
 - Window sizes: home=(420, 390), midi_display=(420, 220), find_chord_mode=(620, 450), find_chord=(620, 440), find_chord_timed=(620, 440), high_scores=(620, 560)
-- Score history is stored in `score_history.json` (git-ignored), keyed by `{enabled_group_names}|sharps={include|exclude|only}`; full history per key; top 10 returned for display
+- Score history is stored in `score_history.json` (git-ignored), keyed by settings combinations. When both left and right hands are enabled, the key includes `|hands=both`; when only left or right is enabled, the key includes `|hands=left` or `|hands=right`. Full history per key; top 10 returned for display
 
 ## Chord Settings Widget (`chord_settings_widget.py`)
-- Reusable toggle UI for chord groups + sharps mode; used by `FindChordModePage` and `HighScoresPage`
+- Reusable toggle UI for chord groups + sharps mode + hands selection; used by `FindChordModePage` and `HighScoresPage`
 - On init: loads saved settings from `chord_settings.json` via `settings_manager.load_chord_settings()`; falls back to all-enabled defaults if file missing/corrupt
 - On `showEvent`: reloads settings from disk (via `_reload_settings_from_disk()`) to stay in sync across multiple widget instances; button states updated without triggering signals
-- Owns `_group_enabled: dict[str, bool]` and `_sharps_mode: str` (one of `"exclude"`, `"include"`, `"only"`); button states initialized from loaded settings (with `blockSignals` to prevent spurious init signals)
-- Two rows of toggle buttons (5 per row) for chord groups + three exclusive radio buttons below for sharps mode ("No Sharps", "With Sharps", "Sharps Only")
-- Enforces at-least-one-group constraint: if only one group is enabled, disallow unchecking it
+- Owns `_group_enabled: dict[str, bool]`, `_sharps_mode: str` (one of `"exclude"`, `"include"`, `"only"`), and `_hands_enabled: dict[str, bool]` (with keys `"left"` and `"right"`); button states initialized from loaded settings (with `blockSignals` to prevent spurious init signals)
+- Two rows of toggle buttons (5 per row) for chord groups + three exclusive radio buttons for sharps mode ("No Sharps", "With Sharps", "Sharps Only") + two toggleable buttons for hands ("✋" for left, "🤚" for right); both hands can be selected simultaneously
+- Enforces at-least-one constraint on both chord groups and hands selection; disallows unchecking the last enabled group or the last enabled hand
 - On every toggle: calls `settings_manager.save_chord_settings()` to persist new state
 - Emits `settings_changed` signal on any toggle change (after save)
-- Exposes read-only properties: `group_enabled` (dict copy), `sharps_mode` (str)
+- Exposes read-only properties: `group_enabled` (dict copy), `sharps_mode` (str), `hands_enabled` (dict copy)
 
 ## Find the Chord Mode page (`find_chord_mode_page.py`)
 - Route selection screen: two buttons for Infinite and Timed modes
 - Delegates chord settings to `ChordSettingsWidget` (stored as `self._settings`)
-- Exposes read-only properties: `group_enabled` (proxies to `self._settings`), `sharps_mode` (proxies to `self._settings`)
+- Exposes read-only properties: `group_enabled` (proxies to `self._settings`), `sharps_mode` (proxies to `self._settings`), `hands_enabled` (proxies to `self._settings`)
 - Settings are passed to both `FindChordPage` and `FindChordTimedPage` at `activate()` time
 - Window size: 620×450
 
@@ -57,10 +58,11 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 - Displays the first 5 chords in a row; leftmost is the current target (larger font, white); others are dimmer/smaller
 - On correct chord match: target label turns green (`#44ff44`) for 500ms, then queue shifts left via `_advance()`
 - `_advancing: bool` flag blocks re-triggering during the green flash
-- `_group_enabled: dict[str, bool]`, `_sharps_mode: str` — set by `activate()` from FindChordModePage
+- `_group_enabled: dict[str, bool]`, `_sharps_mode: str`, `_hands_enabled: dict[str, bool]` — set by `activate()` from FindChordModePage
 - `_available_roots()` — returns filtered list of root notes: all 12 if `"include"`, only naturals (7) if `"exclude"`, only sharps (5) if `"only"`
 - `_random_chord()` picks a random root and suffix, respecting enabled groups and sharps mode
-- `activate(group_enabled: dict, sharps_mode: str)` — stores settings and starts MIDI playback
+- `activate(group_enabled: dict, sharps_mode: str, hands_enabled: dict)` — stores settings and starts MIDI playback
+- `_poll()` — when both left and right hands are enabled in `_hands_enabled`, uses `count_chord_instances()` to detect when the target chord appears in 2+ independent instances; otherwise uses standard `identify_chord()` comparison
 - "Playing" label shows the currently detected chord so the user knows what they're playing if wrong
 - Emits `nav_to_mode_select` on back button
 
@@ -77,13 +79,13 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 - `_time_remaining: int` — counts down from 60 to 0; label turns red (`#ff4444`) at ≤10 seconds
 - `_game_over: bool` — set to `True` when timer reaches 0; blocks `_poll()` and `_advance()` from further scoring
 - Two timers: `_poll_timer` (50ms, runs always) and `_countdown_timer` (1000ms, starts on Start or Play Again)
-- `_group_enabled`, `_sharps_mode` — set by `activate()` from FindChordModePage
+- `_group_enabled`, `_sharps_mode`, `_hands_enabled` — set by `activate()` from FindChordModePage
 - `_start_game()` — called on Start button click; shows chord queue, starts countdown
 - `_tick()` — decrements `_time_remaining`; calls `_end_game()` at 0
 - `_end_game()` — records score and errors to disk via `score_manager.record_score()`, computes accuracy (score / (score + errors) * 100), refreshes best score, stops timers, shows results overlay with final score, best, errors, and accuracy
 - `_restart()` — called from "Play Again" button; skips start screen, goes straight to gameplay; error counter reset on `activate()`
-- `activate(group_enabled, sharps_mode, show_start=True)` — fetches and displays best score for this combo; resets errors to 0 and `_last_chord` to None; if show_start=True, enter start screen; if False, start immediately
-- `_poll()` — guarded by `if self._waiting_to_start or self._game_over: return`; ignores chords where `chord is None` or `chord == _last_chord` (debounce); on new distinct chord: if correct and not `_advancing`, triggers green flash and `_advance()`; if wrong (3+ notes), increments `_errors` and updates label
+- `activate(group_enabled, sharps_mode, hands_enabled, show_start=True)` — fetches and displays best score for this combo; resets errors to 0 and `_last_chord` to None; if show_start=True, enter start screen; if False, start immediately
+- `_poll()` — guarded by `if self._waiting_to_start or self._game_over: return`; ignores chords where `chord is None` or `chord == _last_chord` (debounce); on new distinct chord: if both left and right hands are enabled uses `count_chord_instances()` to check for 2+ instances, otherwise uses standard chord comparison; if correct and not `_advancing`, triggers green flash and `_advance()`; if wrong (3+ notes), increments `_errors` and updates label
 - Emits `nav_to_mode_select` on back button or "Back to Menu"
 
 ## High Scores page (`high_scores_page.py`)
@@ -98,17 +100,17 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 
 ## Score Manager (`score_manager.py`)
 - Pure Python module; no Qt dependencies
-- `settings_key(group_enabled: dict, sharps_mode: str) → str` — generates canonical key from enabled group names (sorted) and sharps mode (`"include"`, `"exclude"`, or `"only"`)
-- `get_top_scores(group_enabled, sharps_mode) → list[dict]` — returns up to 10 entries sorted by score descending then errors ascending; each entry is `{score: int, errors: int, datetime: str}` (ISO-8601)
-- `get_best_score(group_enabled, sharps_mode) → int | None` — returns highest score for this combo (primary sort) or None
-- `record_score(group_enabled, sharps_mode, score: int, errors: int = 0)` — appends new entry with score, errors, and `datetime.now()` timestamp; sorts by (score desc, errors asc) to prioritize highest score, then fewest errors on tie; keeps full history; writes to `score_history.json`
-- File format: JSON dict mapping settings keys to sorted entry lists; created on first save, silently recovers from corrupt files; backward compat: old entries without `errors` field treated as 0 errors
+- `settings_key(group_enabled: dict, sharps_mode: str, hands_enabled: dict) → str` — generates canonical key from enabled group names (sorted), sharps mode (`"include"`, `"exclude"`, or `"only"`), and hands selection (translates `hands_enabled` dict to `"left"`, `"right"`, or `"both"` based on which hands are enabled)
+- `get_top_scores(group_enabled, sharps_mode, hands_enabled) → list[dict]` — returns up to 10 entries sorted by score descending then errors ascending for the given settings combo; each entry is `{score: int, errors: int, datetime: str}` (ISO-8601)
+- `get_best_score(group_enabled, sharps_mode, hands_enabled) → int | None` — returns highest score for this combo (primary sort) or None
+- `record_score(group_enabled, sharps_mode, score: int, errors: int = 0, hands_enabled: dict = None)` — appends new entry with score, errors, and `datetime.now()` timestamp; sorts by (score desc, errors asc) to prioritize highest score, then fewest errors on tie; keeps full history; writes to `score_history.json`
+- File format: JSON dict mapping settings keys to sorted entry lists; created on first save, silently recovers from corrupt files
 
 ## Settings Manager (`settings_manager.py`)
 - Pure Python module; no Qt dependencies
-- `load_chord_settings(group_names: list[str]) → dict` — returns saved settings from `chord_settings.json`, falling back to all-enabled defaults on any error (file missing, corrupt, or new groups added)
-- `save_chord_settings(group_enabled: dict, sharps_mode: str) → None` — writes settings to `chord_settings.json`
-- File format: JSON with `{"group_enabled": {group_name: bool, ...}, "sharps_mode": "include"|"exclude"|"only"}`; created on first toggle change
+- `load_chord_settings(group_names: list[str]) → dict` — returns saved settings from `chord_settings.json`, falling back to all-enabled defaults on any error (file missing, corrupt, or new groups added); returns dict with keys `"group_enabled"`, `"sharps_mode"`, and `"hands_enabled"`
+- `save_chord_settings(group_enabled: dict, sharps_mode: str, hands_enabled: dict) → None` — writes settings to `chord_settings.json`
+- File format: JSON with `{"group_enabled": {group_name: bool, ...}, "sharps_mode": "include"|"exclude"|"only", "hands_enabled": {"left": bool, "right": bool}}`; created on first toggle change; defaults to right hand only if no settings file exists
 
 ## Styling conventions
 - On macOS, PyQt6 does not automatically inherit the parent's `background-color` stylesheet. Any child `QWidget` or `QLabel` inside a dark-background parent must explicitly set `background-color: transparent;` in its own stylesheet, otherwise it renders with the system default (visibly lighter or darker).

@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, Q
 from PyQt6.QtCore import QTimer, pyqtSignal, Qt
 from PyQt6.QtGui import QFont
 
-from midi_display import NOTE_NAMES, CHORD_PATTERNS, identify_chord
+from midi_display import NOTE_NAMES, CHORD_PATTERNS, identify_chord, count_chord_instances
 
 _QUEUE_SIZE = 10
 _DISPLAY_COUNT = 5
@@ -49,6 +49,7 @@ class FindChordPage(QWidget):
         self._queue = []
         self._group_enabled = {}
         self._sharps_mode = "include"
+        self._hands_enabled = {"left": False, "right": True}
 
         self._timer = QTimer()
         self._timer.timeout.connect(self._poll)
@@ -180,7 +181,7 @@ class FindChordPage(QWidget):
             chord = f"{random.choice(roots)}{random.choice(suffixes)}"
         return chord
 
-    def activate(self, group_enabled: dict[str, bool], sharps_mode: str):
+    def activate(self, group_enabled: dict[str, bool], sharps_mode: str, hands_enabled: dict[str, bool]):
         if self._active:
             return
         ports = mido.get_input_names()
@@ -190,6 +191,7 @@ class FindChordPage(QWidget):
             return
         self._group_enabled = group_enabled.copy()
         self._sharps_mode = sharps_mode
+        self._hands_enabled = hands_enabled.copy()
         self._active = True
         self._advancing = False
         self.active_notes = set()
@@ -231,7 +233,18 @@ class FindChordPage(QWidget):
         chord = identify_chord(notes) if notes else None
         self._playing_label.setText(chord if chord else "--")
 
-        if chord and not self._advancing and self._queue and chord == self._queue[0]:
+        if not chord or self._advancing or not self._queue:
+            return
+
+        target = self._queue[0]
+        matched = False
+
+        if self._hands_enabled.get("left") and self._hands_enabled.get("right"):
+            matched = count_chord_instances(set(notes), target) >= 2
+        else:
+            matched = chord == target
+
+        if matched:
             self._chord_labels[0].setStyleSheet("color: #44ff44; background-color: transparent;")
             self._advancing = True
             QTimer.singleShot(_GREEN_DURATION_MS, self._advance)

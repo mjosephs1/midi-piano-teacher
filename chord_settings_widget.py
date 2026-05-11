@@ -17,6 +17,7 @@ class ChordSettingsWidget(QWidget):
         saved = settings_manager.load_chord_settings(list(CHORD_GROUPS.keys()))
         self._group_enabled = saved["group_enabled"]
         self._sharps_mode = saved["sharps_mode"]
+        self._hands_enabled = saved["hands_enabled"]
 
         for group_name, btn in self._group_buttons.items():
             btn.blockSignals(True)
@@ -30,6 +31,12 @@ class ChordSettingsWidget(QWidget):
             btn.blockSignals(False)
             btn.setStyleSheet(_toggle_style(checked=self._sharps_mode == mode))
 
+        for hand, btn in self._hands_buttons.items():
+            btn.blockSignals(True)
+            btn.setChecked(self._hands_enabled.get(hand, False))
+            btn.blockSignals(False)
+            btn.setStyleSheet(_toggle_style(checked=self._hands_enabled.get(hand, False)))
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setStyleSheet("background-color: transparent;")
@@ -37,6 +44,8 @@ class ChordSettingsWidget(QWidget):
         self._group_enabled = saved["group_enabled"]
         self._group_buttons: dict[str, QPushButton] = {}
         self._sharps_mode = saved["sharps_mode"]
+        self._hands_enabled = saved["hands_enabled"]
+        self._hands_buttons: dict[str, QPushButton] = {}
         self._build_ui()
 
     def _build_ui(self):
@@ -92,6 +101,28 @@ class ChordSettingsWidget(QWidget):
 
         layout.addLayout(sharps_row)
 
+        layout.addSpacing(4)
+        hands_row = QHBoxLayout()
+        hands_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hands_row.setSpacing(6)
+
+        hands_config = [("✋", "left"), ("🤚", "right")]
+        for label, hand in hands_config:
+            btn = QPushButton(label)
+            btn.setCheckable(True)
+            initial = self._hands_enabled.get(hand, False)
+            btn.blockSignals(True)
+            btn.setChecked(initial)
+            btn.blockSignals(False)
+            btn.setFixedHeight(26)
+            btn.setFont(QFont("Helvetica", 14))
+            btn.setStyleSheet(_toggle_style(checked=initial))
+            btn.toggled.connect(lambda checked, h=hand: self._on_hands_toggled(h, checked))
+            hands_row.addWidget(btn)
+            self._hands_buttons[hand] = btn
+
+        layout.addLayout(hands_row)
+
     def _on_group_toggled(self, name: str, checked: bool) -> None:
         if not checked and sum(self._group_enabled.values()) <= 1:
             btn = self._group_buttons[name]
@@ -102,7 +133,7 @@ class ChordSettingsWidget(QWidget):
             return
         self._group_enabled[name] = checked
         self._group_buttons[name].setStyleSheet(_toggle_style(checked=checked))
-        settings_manager.save_chord_settings(self._group_enabled, self._sharps_mode)
+        settings_manager.save_chord_settings(self._group_enabled, self._sharps_mode, self._hands_enabled)
         self.settings_changed.emit()
 
     def _on_sharps_mode_selected(self, mode: str, checked: bool) -> None:
@@ -111,7 +142,20 @@ class ChordSettingsWidget(QWidget):
         self._sharps_mode = mode
         for m, btn in self._sharps_buttons.items():
             btn.setStyleSheet(_toggle_style(checked=(m == mode)))
-        settings_manager.save_chord_settings(self._group_enabled, self._sharps_mode)
+        settings_manager.save_chord_settings(self._group_enabled, self._sharps_mode, self._hands_enabled)
+        self.settings_changed.emit()
+
+    def _on_hands_toggled(self, hand: str, checked: bool) -> None:
+        if not checked and sum(self._hands_enabled.values()) <= 1:
+            btn = self._hands_buttons[hand]
+            btn.blockSignals(True)
+            btn.setChecked(True)
+            btn.blockSignals(False)
+            btn.setStyleSheet(_toggle_style(checked=True))
+            return
+        self._hands_enabled[hand] = checked
+        self._hands_buttons[hand].setStyleSheet(_toggle_style(checked=checked))
+        settings_manager.save_chord_settings(self._group_enabled, self._sharps_mode, self._hands_enabled)
         self.settings_changed.emit()
 
     @property
@@ -121,3 +165,7 @@ class ChordSettingsWidget(QWidget):
     @property
     def sharps_mode(self) -> str:
         return self._sharps_mode
+
+    @property
+    def hands_enabled(self) -> dict[str, bool]:
+        return self._hands_enabled.copy()
