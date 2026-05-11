@@ -428,11 +428,17 @@ class FindChordTimedPage(QWidget):
         chord = identify_chord(notes) if notes else None
         self._playing_label.setText(chord if chord else "--")
 
-        # Ignore if no recognized chord or same chord as last time
-        if chord is None or chord == self._last_chord:
+        # Ignore if no recognized chord
+        if chord is None:
             return
 
-        self._last_chord = chord
+        both_hands = self._hands_enabled.get("left") and self._hands_enabled.get("right")
+        chord_state = f"{chord}:{'full' if len(notes) >= 6 else 'partial'}" if both_hands else chord
+
+        if chord_state == self._last_chord:
+            return
+
+        self._last_chord = chord_state
 
         if self._advancing or not self._queue:
             return
@@ -449,7 +455,7 @@ class FindChordTimedPage(QWidget):
             self._chord_labels[0].setStyleSheet("color: #44ff44; background-color: transparent;")
             self._advancing = True
             QTimer.singleShot(_GREEN_DURATION_MS, self._advance)
-        elif len(notes) >= 3:
+        elif len(notes) >= (6 if both_hands else 3):
             self._errors += 1
             self._errors_label.setText(f"Errors: {self._errors}")
 
