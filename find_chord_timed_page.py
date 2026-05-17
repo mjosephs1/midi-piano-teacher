@@ -1,5 +1,6 @@
 import random
 import threading
+import time
 
 import mido
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QPushButton, QMessageBox
@@ -9,6 +10,7 @@ from PyQt6.QtGui import QFont
 from midi_display import NOTE_NAMES, CHORD_PATTERNS, identify_chord, count_chord_instances
 from find_chord_page import CHORD_GROUPS
 import score_manager
+import stats_manager
 
 _QUEUE_SIZE = 10
 _DISPLAY_COUNT = 5
@@ -33,6 +35,9 @@ class FindChordTimedPage(QWidget):
         self._best_score: int | None = None
         self._errors: int = 0
         self._last_chord: str | None = None
+        self._transition_start_time: float | None = None
+        self._current_target_errors: int = 0
+        self._prev_target: str | None = None
         self._time_remaining = _GAME_DURATION_SECS
         self._group_enabled = {}
         self._sharps_mode = "include"
@@ -333,6 +338,9 @@ class FindChordTimedPage(QWidget):
         self._best_label.setText(f"Best: {self._best_score}" if self._best_score is not None else "Best: —")
         self._errors = 0
         self._last_chord = None
+        self._transition_start_time = None
+        self._current_target_errors = 0
+        self._prev_target = None
         self._errors_label.setText("Errors: 0")
         self._time_label.setText("60s")
         self._time_label.setStyleSheet("color: #ffffff; background-color: transparent;")
@@ -354,6 +362,7 @@ class FindChordTimedPage(QWidget):
             self._chord_area.show()
             self._start_btn.hide()
             self._countdown_timer.start(1000)
+            self._transition_start_time = time.time()
 
     def deactivate(self):
         self._poll_timer.stop()
@@ -374,6 +383,7 @@ class FindChordTimedPage(QWidget):
         self._queue = self._build_queue()
         self._refresh_chord_labels()
         self._countdown_timer.start(1000)
+        self._transition_start_time = time.time()
 
     def _midi_loop(self, port_name):
         try:
@@ -457,16 +467,24 @@ class FindChordTimedPage(QWidget):
             QTimer.singleShot(_GREEN_DURATION_MS, self._advance)
         elif len(notes) >= (6 if both_hands else 3):
             self._errors += 1
+            self._current_target_errors += 1
             self._errors_label.setText(f"Errors: {self._errors}")
 
     def _advance(self):
         if self._game_over:
             self._advancing = False
             return
+        completed_chord = self._queue[0]
+        if self._prev_target is not None and self._transition_start_time is not None:
+            elapsed = time.time() - self._transition_start_time
+            stats_manager.record_transition(self._prev_target, completed_chord, elapsed, self._current_target_errors)
         self._score += 1
         self._score_label.setText(f"Score: {self._score}")
         self._queue.pop(0)
         while len(self._queue) < _QUEUE_SIZE:
             self._queue.append(self._random_chord(exclude=self._queue[-1] if self._queue else None))
         self._refresh_chord_labels()
+        self._prev_target = completed_chord
+        self._transition_start_time = time.time()
+        self._current_target_errors = 0
         self._advancing = False

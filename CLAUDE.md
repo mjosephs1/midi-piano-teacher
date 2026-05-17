@@ -15,6 +15,7 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 - `high_scores_page.py` — `HighScoresPage(QWidget)` displays top-10 scores per chord group/sharps combination with timestamps and accuracy %
 - `score_manager.py` — score persistence module: loads/saves JSON, manages top-10 per settings key, records new scores with timestamps and errors
 - `settings_manager.py` — chord settings persistence: loads/saves selected chord groups and sharps to `chord_settings.json` on startup and after each toggle
+- `stats_manager.py` — chord transition stats: tracks per-transition time and error averages in `stats.json` for timed mode
 - `requirements.txt` — `mido>=1.3.0`, `python-rtmidi>=1.5.0`, `PyQt6>=6.0.0`
 
 ## Key functions in `midi_display.py`
@@ -75,17 +76,21 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 - `_best_score: int | None` — fetched on `activate()`; displayed in top-right as "Best: N" or "Best: —"
 - `_errors: int` — incremented when user plays 3+ notes forming a recognized chord that doesn't match target; displayed during gameplay and in results overlay
 - `_last_chord: str | None` — debounce tracker; any chord equal to `_last_chord` is ignored (prevents double-counting same held chord)
+- `_transition_start_time: float | None` — `time.time()` when the current target chord became the target (set in `_start_game()` or in the `show_start=False` branch of `activate()`, updated each time `_advance()` shifts the queue)
+- `_current_target_errors: int` — errors made while the current target chord has been the target; reset to 0 in `activate()` and after each `_advance()`
+- `_prev_target: str | None` — the chord that was the target before the current one; used to create the chord transition key for stats recording
 - `_errors_label`, `_results_errors_label`, `_results_accuracy_label` — UI labels for errors during gameplay and accuracy % in results overlay
 - `_time_remaining: int` — counts down from 60 to 0; label turns red (`#ff4444`) at ≤10 seconds
 - `_game_over: bool` — set to `True` when timer reaches 0; blocks `_poll()` and `_advance()` from further scoring
 - Two timers: `_poll_timer` (50ms, runs always) and `_countdown_timer` (1000ms, starts on Start or Play Again)
 - `_group_enabled`, `_sharps_mode`, `_hands_enabled` — set by `activate()` from FindChordModePage
-- `_start_game()` — called on Start button click; shows chord queue, starts countdown
+- `_start_game()` — called on Start button click; shows chord queue, starts countdown, sets `_transition_start_time` to begin tracking the first chord
 - `_tick()` — decrements `_time_remaining`; calls `_end_game()` at 0
 - `_end_game()` — records score and errors to disk via `score_manager.record_score()`, computes accuracy (score / (score + errors) * 100), refreshes best score, stops timers, shows results overlay with final score, best, errors, and accuracy
 - `_restart()` — called from "Play Again" button; skips start screen, goes straight to gameplay; error counter reset on `activate()`
-- `activate(group_enabled, sharps_mode, hands_enabled, show_start=True)` — fetches and displays best score for this combo; resets errors to 0 and `_last_chord` to None; if show_start=True, enter start screen; if False, start immediately
-- `_poll()` — guarded by `if self._waiting_to_start or self._game_over: return`; ignores chords where `chord is None` or `chord == _last_chord` (debounce); on new distinct chord: if both left and right hands are enabled uses `count_chord_instances()` to check for 2+ instances, otherwise uses standard chord comparison; if correct and not `_advancing`, triggers green flash and `_advance()`; if wrong (3+ notes), increments `_errors` and updates label
+- `activate(group_enabled, sharps_mode, hands_enabled, show_start=True)` — fetches and displays best score for this combo; resets errors to 0, `_last_chord` to None, and transition tracking state; if show_start=True, enter start screen; if False, start immediately and set `_transition_start_time`
+- `_poll()` — guarded by `if self._waiting_to_start or self._game_over: return`; ignores chords where `chord is None` or `chord == _last_chord` (debounce); on new distinct chord: if both left and right hands are enabled uses `count_chord_instances()` to check for 2+ instances, otherwise uses standard chord comparison; if correct and not `_advancing`, triggers green flash and `_advance()`; if wrong (3+ notes), increments both `_errors` and `_current_target_errors` and updates label
+- `_advance()` — records the completed transition via `stats_manager.record_transition()` if `_prev_target` is not None (skips first chord), increments score, shifts queue, updates target and transition timing state for the next chord
 - Emits `nav_to_mode_select` on back button or "Back to Menu"
 
 ## High Scores page (`high_scores_page.py`)
@@ -111,6 +116,15 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 - `load_chord_settings(group_names: list[str]) → dict` — returns saved settings from `chord_settings.json`, falling back to all-enabled defaults on any error (file missing, corrupt, or new groups added); returns dict with keys `"group_enabled"`, `"sharps_mode"`, and `"hands_enabled"`
 - `save_chord_settings(group_enabled: dict, sharps_mode: str, hands_enabled: dict) → None` — writes settings to `chord_settings.json`
 - File format: JSON with `{"group_enabled": {group_name: bool, ...}, "sharps_mode": "include"|"exclude"|"only", "hands_enabled": {"left": bool, "right": bool}}`; created on first toggle change; defaults to right hand only if no settings file exists
+
+## Stats Manager (`stats_manager.py`)
+- Pure Python module; no Qt dependencies; used only in timed mode
+- Tracks chord transition statistics: per-transition time (in seconds) and error counts
+- `record_transition(from_chord: str, to_chord: str, elapsed_seconds: float, errors: int) → None` — records or updates a transition stat entry; maintains running averages (new_avg = (old_avg * old_count + new_value) / (old_count + 1))
+- File format: JSON dict mapping chord transition keys (e.g. `"AmajCmaj"`) to entry dicts; each entry: `{"time": float (rounded to 3 decimals), "errors": float (rounded to 3 decimals), "count": int}`
+- Key generation: simple concatenation `f"{from_chord}{to_chord}"` with no separator (e.g. "Cmaj" → "F#min" becomes `"CmajF#min"`)
+- File is created on first transition record; silently recovers from corrupt files (returns empty dict)
+- Note: stats are global and not keyed by game settings (chord group filters, sharps mode, hands mode), as physical chord difficulty is independent of these settings
 
 ## Styling conventions
 - On macOS, PyQt6 does not automatically inherit the parent's `background-color` stylesheet. Any child `QWidget` or `QLabel` inside a dark-background parent must explicitly set `background-color: transparent;` in its own stylesheet, otherwise it renders with the system default (visibly lighter or darker).
