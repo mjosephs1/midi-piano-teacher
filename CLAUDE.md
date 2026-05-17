@@ -13,6 +13,7 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 - `find_chord_timed_page.py` — `FindChordTimedPage(QWidget)` Timed mode: 60-second chord challenge with score counter; records scores to disk
 - `chord_settings_widget.py` — `ChordSettingsWidget(QWidget)` reusable toggle panel for chord groups + sharps; emits `settings_changed` signal on toggle; loads/saves selections via `settings_manager`
 - `high_scores_page.py` — `HighScoresPage(QWidget)` displays top-10 scores per chord group/sharps combination with timestamps and accuracy %
+- `stats_page.py` — `StatsPage(QWidget)` displays all recorded chord transition stats with sortable table and hand selection
 - `score_manager.py` — score persistence module: loads/saves JSON, manages top-10 per settings key, records new scores with timestamps and errors
 - `settings_manager.py` — chord settings persistence: loads/saves selected chord groups and sharps to `chord_settings.json` on startup and after each toggle
 - `stats_manager.py` — chord transition stats: tracks per-transition time and error averages in `stats.json` for timed mode
@@ -26,14 +27,14 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 - `CHORD_PATTERNS` — dict mapping semitone interval tuples to chord name suffixes (18 chord types)
 
 ## Architecture
-- Single `QMainWindow` shell with `QStackedWidget` for multi-screen navigation (6 pages: Home, MIDI Display, Find Chord Mode, Find Chord Infinite, Find Chord Timed, High Scores)
+- Single `QMainWindow` shell with `QStackedWidget` for multi-screen navigation (7 pages: Home, MIDI Display, Find Chord Mode, Find Chord Infinite, Find Chord Timed, High Scores, Stats)
 - MIDI thread starts on demand when user navigates to a MIDI page (`activate()`); stops on back navigation (`deactivate()`)
 - `_go_to_home()` in `MainWindow` defensively calls `deactivate()` on all MIDI pages (`_midi_display`, `_find_chord`, `_find_chord_timed`)
 - `active_notes: set` tracks currently held MIDI note numbers; protected by `threading.Lock`
 - GUI polls state every 50ms via `QTimer` on the main thread
 - Navigation is signal-driven: pages emit `pyqtSignal` → `MainWindow` handles routing and window resizing
 - Device: auto-selects first available MIDI input port
-- Window sizes: home=(420, 390), midi_display=(420, 220), find_chord_mode=(620, 450), find_chord=(620, 440), find_chord_timed=(620, 440), high_scores=(620, 560)
+- Window sizes: home=(420, 446), midi_display=(420, 220), find_chord_mode=(620, 450), find_chord=(620, 440), find_chord_timed=(620, 440), high_scores=(620, 560), stats=(620, 560)
 - Score history is stored in `score_history.json` (git-ignored), keyed by settings combinations. When both left and right hands are enabled, the key includes `|hands=both`; when only left or right is enabled, the key includes `|hands=left` or `|hands=right`. Full history per key; top 10 returned for display
 
 ## Chord Settings Widget (`chord_settings_widget.py`)
@@ -103,6 +104,15 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 - Emits `nav_to_home` on back button
 - Window size: 620×560
 
+## Stats page (`stats_page.py`)
+- Displays all recorded chord transition statistics in a scrollable table
+- Implements hand toggle buttons (✋, 🤚, ✋🤚) to filter stats by left/right/both hands; mutually exclusive (only one hand key active at a time); defaults to right hand
+- `_sort_by` field tracks sort order (`"time"` or `"errors"`); dropdown with "Time" (default) and "Errors" options; sorts descending in all cases
+- `_refresh()` called on `showEvent` and after any control change; fetches stats from `stats_manager.get_all_stats(hand_key)`, sorts by selected field, builds rows in `_rows_layout`
+- Table columns: From → To (240px), Avg Time (90px, centered), Avg Errors (90px, centered), Count (60px, centered)
+- Emits `nav_to_home` on back button
+- Window size: 620×560
+
 ## Score Manager (`score_manager.py`)
 - Pure Python module; no Qt dependencies
 - `settings_key(group_enabled: dict, sharps_mode: str, hands_enabled: dict) → str` — generates canonical key from enabled group names (sorted), sharps mode (`"include"`, `"exclude"`, or `"only"`), and hands selection (translates `hands_enabled` dict to `"left"`, `"right"`, or `"both"` based on which hands are enabled)
@@ -118,11 +128,12 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 - File format: JSON with `{"group_enabled": {group_name: bool, ...}, "sharps_mode": "include"|"exclude"|"only", "hands_enabled": {"left": bool, "right": bool}}`; created on first toggle change; defaults to right hand only if no settings file exists
 
 ## Stats Manager (`stats_manager.py`)
-- Pure Python module; no Qt dependencies; used only in timed mode
+- Pure Python module; no Qt dependencies; used in timed mode and Stats page
 - Tracks chord transition statistics per hand (left, right, both): per-transition time (in seconds) and error counts
 - `_hands_key(hands_enabled: dict) → str` — maps `hands_enabled` dict to `"left"`, `"right"`, or `"both"` key
-- `record_transition(from_chord: str, to_chord: str, elapsed_seconds: float, errors: int, hands_enabled: dict) → None` — records or updates a transition stat entry for the specified hand; maintains running averages (new_avg = (old_avg * old_count + new_value) / (old_count + 1))
-- File format: JSON dict mapping chord transition keys (e.g. `"AmajCmaj"`) to entry dicts; each entry has three sub-keys (`"left"`, `"right"`, `"both"`), and each sub-key contains `{"time": float (rounded to 3 decimals), "errors": float (rounded to 3 decimals), "count": int}`
+- `record_transition(from_chord: str, to_chord: str, elapsed_seconds: float, errors: int, hands_enabled: dict) → None` — records or updates a transition stat entry for the specified hand; maintains running averages (new_avg = (old_avg * old_count + new_value) / (old_count + 1)); also stores `"from_chord"` and `"to_chord"` at top level of each key's entry (set once on first record)
+- `get_all_stats(hand_key: str) → list[dict]` — returns all transition stats for the given hand key (`"left"`, `"right"`, or `"both"`); each dict contains `from_chord`, `to_chord`, `time`, `errors`, `count`
+- File format: JSON dict mapping chord transition keys (e.g. `"AmajCmaj"`) to entry dicts; each entry has `"from_chord"`, `"to_chord"`, and three sub-keys (`"left"`, `"right"`, `"both"`); each sub-key contains `{"time": float (rounded to 3 decimals), "errors": float (rounded to 3 decimals), "count": int}`
 - Key generation: simple concatenation `f"{from_chord}{to_chord}"` with no separator (e.g. "Cmaj" → "F#min" becomes `"CmajF#min"`)
 - File is created on first transition record; silently recovers from corrupt files (returns empty dict)
 - Stats are keyed by hand configuration (left, right, both) so users can track chord difficulty separately per hand

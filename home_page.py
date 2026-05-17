@@ -7,6 +7,7 @@ class HomePage(QWidget):
     nav_to_midi_display = pyqtSignal()
     nav_to_find_chord = pyqtSignal()
     nav_to_high_scores = pyqtSignal()
+    nav_to_stats = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -91,3 +92,25 @@ class HomePage(QWidget):
         """)
         btn3.clicked.connect(self.nav_to_high_scores)
         layout.addWidget(btn3)
+
+        layout.addSpacing(12)
+
+        btn4 = QPushButton("Stats")
+        btn4.setFont(QFont("Helvetica", 15))
+        btn4.setFixedHeight(44)
+        btn4.setStyleSheet("""
+            QPushButton {
+                background-color: #1a6b6b;
+                color: #ffffff;
+                border: none;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background-color: #2a8b8b;
+            }
+            QPushButton:pressed {
+                background-color: #0a5b5b;
+            }
+        """)
+        btn4.clicked.connect(self.nav_to_stats)
+        layout.addWidget(btn4)

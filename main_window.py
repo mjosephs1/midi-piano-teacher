@@ -6,13 +6,15 @@ from find_chord_page import FindChordPage
 from find_chord_mode_page import FindChordModePage
 from find_chord_timed_page import FindChordTimedPage
 from high_scores_page import HighScoresPage
+from stats_page import StatsPage
 
-_HOME_SIZE = (420, 390)
+_HOME_SIZE = (420, 446)
 _MIDI_DISPLAY_SIZE = (420, 220)
 _FIND_CHORD_MODE_SIZE = (620, 450)
 _FIND_CHORD_SIZE = (620, 440)
 _FIND_CHORD_TIMED_SIZE = (620, 440)
 _HIGH_SCORES_SIZE = (620, 560)
+_STATS_SIZE = (620, 560)
 
 
 class MainWindow(QMainWindow):
@@ -29,6 +31,7 @@ class MainWindow(QMainWindow):
         self._find_chord_mode = FindChordModePage()
         self._find_chord_timed = FindChordTimedPage()
         self._high_scores = HighScoresPage()
+        self._stats = StatsPage()
 
         self._stack.addWidget(self._home)
         self._stack.addWidget(self._midi_display)
@@ -36,10 +39,12 @@ class MainWindow(QMainWindow):
         self._stack.addWidget(self._find_chord_mode)
         self._stack.addWidget(self._find_chord_timed)
         self._stack.addWidget(self._high_scores)
+        self._stack.addWidget(self._stats)
 
         self._home.nav_to_midi_display.connect(self._go_to_midi_display)
         self._home.nav_to_find_chord.connect(self._go_to_find_chord_mode)
         self._home.nav_to_high_scores.connect(self._go_to_high_scores)
+        self._home.nav_to_stats.connect(self._go_to_stats)
         self._midi_display.nav_to_home.connect(self._go_to_home)
         self._find_chord_mode.nav_to_home.connect(self._go_to_home)
         self._find_chord_mode.nav_to_infinite.connect(self._go_to_find_chord)
@@ -47,6 +52,7 @@ class MainWindow(QMainWindow):
         self._find_chord.nav_to_mode_select.connect(self._go_to_find_chord_mode)
         self._find_chord_timed.nav_to_mode_select.connect(self._go_to_find_chord_mode)
         self._high_scores.nav_to_home.connect(self._go_to_home)
+        self._stats.nav_to_home.connect(self._go_to_home)
 
         self._go_to_home()
 
@@ -81,3 +87,7 @@ class MainWindow(QMainWindow):
     def _go_to_high_scores(self):
         self._stack.setCurrentWidget(self._high_scores)
         self.setFixedSize(*_HIGH_SCORES_SIZE)
+
+    def _go_to_stats(self):
+        self._stack.setCurrentWidget(self._stats)
+        self.setFixedSize(*_STATS_SIZE)

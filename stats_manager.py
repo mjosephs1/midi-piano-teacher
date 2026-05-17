@@ -39,6 +39,8 @@ def record_transition(from_chord: str, to_chord: str, elapsed_seconds: float, er
         data[key] = {}
 
     entry = data[key]
+    entry.setdefault("from_chord", from_chord)
+    entry.setdefault("to_chord", to_chord)
     if hand_key not in entry:
         entry[hand_key] = {"time": round(elapsed_seconds, 3), "errors": float(errors), "count": 1}
     else:
@@ -49,3 +51,24 @@ def record_transition(from_chord: str, to_chord: str, elapsed_seconds: float, er
         sub["count"] = count + 1
 
     _save(data)
+
+
+def get_all_stats(hand_key: str) -> list[dict]:
+    data = _load()
+    result = []
+    for entry in data.values():
+        if hand_key not in entry:
+            continue
+        from_chord = entry.get("from_chord")
+        to_chord = entry.get("to_chord")
+        if not from_chord or not to_chord:
+            continue
+        sub = entry[hand_key]
+        result.append({
+            "from_chord": from_chord,
+            "to_chord": to_chord,
+            "time": sub["time"],
+            "errors": sub["errors"],
+            "count": sub["count"],
+        })
+    return result
