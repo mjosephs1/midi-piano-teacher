@@ -477,7 +477,7 @@ class FindChordTimedPage(QWidget):
         completed_chord = self._queue[0]
         if self._prev_target is not None and self._transition_start_time is not None:
             elapsed = time.time() - self._transition_start_time
-            stats_manager.record_transition(self._prev_target, completed_chord, elapsed, self._current_target_errors)
+            stats_manager.record_transition(self._prev_target, completed_chord, elapsed, self._current_target_errors, self._hands_enabled)
         self._score += 1
         self._score_label.setText(f"Score: {self._score}")
         self._queue.pop(0)

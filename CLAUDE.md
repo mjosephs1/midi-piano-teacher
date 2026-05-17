@@ -90,7 +90,7 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 - `_restart()` — called from "Play Again" button; skips start screen, goes straight to gameplay; error counter reset on `activate()`
 - `activate(group_enabled, sharps_mode, hands_enabled, show_start=True)` — fetches and displays best score for this combo; resets errors to 0, `_last_chord` to None, and transition tracking state; if show_start=True, enter start screen; if False, start immediately and set `_transition_start_time`
 - `_poll()` — guarded by `if self._waiting_to_start or self._game_over: return`; ignores chords where `chord is None` or `chord == _last_chord` (debounce); on new distinct chord: if both left and right hands are enabled uses `count_chord_instances()` to check for 2+ instances, otherwise uses standard chord comparison; if correct and not `_advancing`, triggers green flash and `_advance()`; if wrong (3+ notes), increments both `_errors` and `_current_target_errors` and updates label
-- `_advance()` — records the completed transition via `stats_manager.record_transition()` if `_prev_target` is not None (skips first chord), increments score, shifts queue, updates target and transition timing state for the next chord
+- `_advance()` — records the completed transition via `stats_manager.record_transition()` with the current `_hands_enabled` if `_prev_target` is not None (skips first chord), increments score, shifts queue, updates target and transition timing state for the next chord
 - Emits `nav_to_mode_select` on back button or "Back to Menu"
 
 ## High Scores page (`high_scores_page.py`)
@@ -119,12 +119,13 @@ Real-time MIDI note and chord display app for macOS, written in Python.
 
 ## Stats Manager (`stats_manager.py`)
 - Pure Python module; no Qt dependencies; used only in timed mode
-- Tracks chord transition statistics: per-transition time (in seconds) and error counts
-- `record_transition(from_chord: str, to_chord: str, elapsed_seconds: float, errors: int) → None` — records or updates a transition stat entry; maintains running averages (new_avg = (old_avg * old_count + new_value) / (old_count + 1))
-- File format: JSON dict mapping chord transition keys (e.g. `"AmajCmaj"`) to entry dicts; each entry: `{"time": float (rounded to 3 decimals), "errors": float (rounded to 3 decimals), "count": int}`
+- Tracks chord transition statistics per hand (left, right, both): per-transition time (in seconds) and error counts
+- `_hands_key(hands_enabled: dict) → str` — maps `hands_enabled` dict to `"left"`, `"right"`, or `"both"` key
+- `record_transition(from_chord: str, to_chord: str, elapsed_seconds: float, errors: int, hands_enabled: dict) → None` — records or updates a transition stat entry for the specified hand; maintains running averages (new_avg = (old_avg * old_count + new_value) / (old_count + 1))
+- File format: JSON dict mapping chord transition keys (e.g. `"AmajCmaj"`) to entry dicts; each entry has three sub-keys (`"left"`, `"right"`, `"both"`), and each sub-key contains `{"time": float (rounded to 3 decimals), "errors": float (rounded to 3 decimals), "count": int}`
 - Key generation: simple concatenation `f"{from_chord}{to_chord}"` with no separator (e.g. "Cmaj" → "F#min" becomes `"CmajF#min"`)
 - File is created on first transition record; silently recovers from corrupt files (returns empty dict)
-- Note: stats are global and not keyed by game settings (chord group filters, sharps mode, hands mode), as physical chord difficulty is independent of these settings
+- Stats are keyed by hand configuration (left, right, both) so users can track chord difficulty separately per hand
 
 ## Styling conventions
 - On macOS, PyQt6 does not automatically inherit the parent's `background-color` stylesheet. Any child `QWidget` or `QLabel` inside a dark-background parent must explicitly set `background-color: transparent;` in its own stylesheet, otherwise it renders with the system default (visibly lighter or darker).

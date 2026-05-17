@@ -19,15 +19,33 @@ def _save(data: dict) -> None:
         json.dump(data, f, indent=2)
 
 
-def record_transition(from_chord: str, to_chord: str, elapsed_seconds: float, errors: int) -> None:
+def _hands_key(hands_enabled: dict[str, bool]) -> str:
+    left = hands_enabled.get("left", False)
+    right = hands_enabled.get("right", False)
+    if left and right:
+        return "both"
+    elif left:
+        return "left"
+    else:
+        return "right"
+
+
+def record_transition(from_chord: str, to_chord: str, elapsed_seconds: float, errors: int, hands_enabled: dict[str, bool]) -> None:
     data = _load()
     key = f"{from_chord}{to_chord}"
-    if key in data:
-        entry = data[key]
-        count = entry["count"]
-        entry["time"] = round((entry["time"] * count + elapsed_seconds) / (count + 1), 3)
-        entry["errors"] = round((entry["errors"] * count + errors) / (count + 1), 3)
-        entry["count"] = count + 1
+    hand_key = _hands_key(hands_enabled)
+
+    if key not in data:
+        data[key] = {}
+
+    entry = data[key]
+    if hand_key not in entry:
+        entry[hand_key] = {"time": round(elapsed_seconds, 3), "errors": float(errors), "count": 1}
     else:
-        data[key] = {"time": round(elapsed_seconds, 3), "errors": float(errors), "count": 1}
+        sub = entry[hand_key]
+        count = sub["count"]
+        sub["time"] = round((sub["time"] * count + elapsed_seconds) / (count + 1), 3)
+        sub["errors"] = round((sub["errors"] * count + errors) / (count + 1), 3)
+        sub["count"] = count + 1
+
     _save(data)
